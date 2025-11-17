@@ -114,6 +114,7 @@ docker compose -f docker-compose.dev.yml up
 | **Deployment** | Cloud-only (heavy deps) | Edge-first (zero external services) |
 
 **Progressive Enhancement Pattern:**
+
 - **BM25 → HTTP Embedder**: Lexical search always works, neural embeddings enhance accuracy
 - **Statistical Summary → LLM Summary**: Label propagation always generates summaries, async LLM enrichment improves quality
 - **Works Offline**: Full GraphRAG functionality without internet connection
