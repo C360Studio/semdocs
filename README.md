@@ -10,24 +10,35 @@ SemStreams is a distributed semantic stream processing platform designed for edg
 
 **Core Capabilities:**
 
-- **Flow-Based Stream Processing**: Modular components for ingesting from any source (UDP, TCP, HTTP, WebSocket), parsing any format (JSON, CSV, raw bytes), and constructing semantic knowledge graphs
+### Real-Time Stream Processing
 
-- **Query Strategies** - Two complementary approaches:
-  - **PathRAG**: Graph traversal for tracing relationships (dependencies, impact chains, spatial connections) - See [PathRAG Guide](docs/guides/pathrag.md)
-  - **GraphRAG**: Hierarchical community detection for semantic similarity search (local/global modes) - See [GraphRAG Guide](docs/guides/graphrag.md)
-  - **Hybrid Queries**: Combine both for maximum context - See [Hybrid Patterns](docs/guides/hybrid-queries.md)
-  - **Not sure which to use?** Start with [Choosing Your Query Strategy](docs/guides/choosing-query-strategy.md)
+- **Flexible Ingestion**: UDP, TCP, HTTP, WebSocket sources
+- **Universal Parsing**: JSON, CSV, raw bytes, custom formats
+- **Graph Construction**: Real-time entity extraction and relationship building
+- **Flow-Based Architecture**: Modular, composable processing components
 
-- **GraphRAG Architecture**:
-  - **Zero-Dependency Core**: BM25 embeddings + statistical summaries (pure Go, works offline)
-  - **Progressive Enhancement**: Optional HTTP embedder + async LLM enrichment when available
-  - **Edge-Optimized Storage**: NATS KV replaces traditional vector/graph databases
-  - **Built on PathRAG Infrastructure**: Uses same graph storage and traversal capabilities
+### Graph Query & Search
 
-- **Additional Capabilities**:
-  - **Semantic Search**: Vector embeddings + BM25 hybrid search
-  - **Graph Clustering**: Community detection with label propagation
-  - **Federation**: Distributed graph processing across multiple instances
+- **PathRAG**: Fast graph traversal for tracing dependencies, impact chains, and spatial relationships ([guide](docs/guides/pathrag.md))
+- **GraphRAG**: Semantic search using hierarchical community detection with local/global modes ([guide](docs/guides/graphrag.md))
+- **Hybrid Queries**: Combine structural + semantic approaches for comprehensive results ([patterns](docs/guides/hybrid-queries.md))
+- **Not sure which to use?** See [Choosing Your Query Strategy](docs/guides/choosing-query-strategy.md)
+
+### Progressive Enhancement Philosophy
+
+**Works offline with zero dependencies, gets better with optional services:**
+
+- **Embeddings**: BM25 (pure Go, always works) → HTTP neural embeddings (optional enhancement)
+- **Summaries**: Statistical TF-IDF (always works) → Async LLM enrichment (optional enhancement)
+- **Storage**: Local NATS KV (always works) → Distributed federation (optional enhancement)
+
+This means SemStreams runs in constrained environments while gracefully scaling up when resources are available.
+
+### Distributed & Edge-Ready
+
+- **Federation**: Multi-instance graph synchronization
+- **Edge Deployment**: Minimal resource footprint, offline capable
+- **Cloud Scale**: Optional neural embeddings, LLM services, distributed storage
 
 ## Ecosystem Components
 
@@ -118,33 +129,64 @@ docker compose -f docker-compose.dev.yml up
 
 ## Architecture Highlights
 
-### GraphRAG: Edge-Optimized, Progressive Enhancement
+### Stream Processing Pipeline
 
-**Unlike typical GraphRAG stacks** (requires Pinecone + Neo4j + S3 + LLM API), **SemStreams works offline**:
-
-| Component | Typical GraphRAG | SemStreams |
-|-----------|-----------------|------------|
-| **Vector Storage** | Pinecone/Weaviate (required) | BM25 (pure Go) + optional HTTP embedder |
-| **Graph Storage** | Neo4j/TigerGraph (required) | NATS KV + in-memory |
-| **Summaries** | LLM API (required) | Statistical (TF-IDF) + optional async LLM |
-| **Deployment** | Cloud-only (heavy deps) | Edge-first (zero external services) |
-
-**Progressive Enhancement Pattern:**
-
-- **BM25 → HTTP Embedder**: Lexical search always works, neural embeddings enhance accuracy
-- **Statistical Summary → LLM Summary**: Label propagation always generates summaries, async LLM enrichment improves quality
-- **Works Offline**: Full GraphRAG functionality without internet connection
-
-See [GraphRAG Guide](docs/guides/graphrag.md) for local/global search patterns and configuration.
-
-### Stream Processing Flow
+**Data flows through modular, composable components:**
 
 ```text
-Input → Parser → Graph Builder → Indexer → Query Engine
-  ↓                    ↓             ↓           ↓
-NATS              Entity Store   Embeddings   GraphQL/REST
-                    (KV)          (BM25/HTTP)
+┌─────────────────────────────────────────────────────────────┐
+│                      Input Sources                           │
+│   UDP │ TCP │ HTTP │ WebSocket │ File │ NATS │ Custom      │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│                       Parsers                                │
+│      JSON │ CSV │ Binary │ Custom │ Streaming               │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│                   Graph Builder                              │
+│   Entity Extraction │ Relationship Discovery │ Validation   │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│                  Storage & Indexing                          │
+│   NATS KV │ Semantic Index │ Graph Index │ Communities      │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│                  Query Engines                               │
+│   PathRAG │ GraphRAG │ Semantic Search │ GraphQL │ REST     │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+**Key Design Principles:**
+
+- **Modular**: Each component is independently deployable
+- **Composable**: Mix and match to build custom flows
+- **Event-Driven**: NATS-based messaging throughout
+- **Resource-Aware**: Configurable limits for edge deployment
+
+### Progressive Enhancement in Practice
+
+**Unlike typical RAG/search stacks that require heavy cloud dependencies, SemStreams works offline:**
+
+| Capability | Baseline (Always Works) | Enhancement (Optional) |
+|-----------|------------------------|----------------------|
+| **Embeddings** | BM25 lexical (pure Go) | HTTP neural embeddings |
+| **Summaries** | Statistical TF-IDF | Async LLM enrichment |
+| **Storage** | Local NATS KV | Federated multi-instance |
+| **Network** | Offline operation | Distributed sync |
+| **Query** | PathRAG + BM25 GraphRAG | Neural embeddings GraphRAG |
+
+This means you can:
+
+- ✅ Develop locally without internet
+- ✅ Deploy to edge devices with minimal resources
+- ✅ Scale up to cloud with neural models when available
+- ✅ Degrade gracefully when services are unavailable
+
+See [GraphRAG Guide](docs/guides/graphrag.md) and [PathRAG Guide](docs/guides/pathrag.md) for query patterns.
 
 ### Core Service Architecture
 
