@@ -12,10 +12,42 @@ SemStreams is a distributed semantic stream processing platform designed for edg
 
 ### Real-Time Stream Processing
 
-- **Flexible Ingestion**: UDP, TCP, HTTP, WebSocket sources
-- **Universal Parsing**: JSON, CSV, raw bytes, custom formats
-- **Graph Construction**: Real-time entity extraction and relationship building
-- **Flow-Based Architecture**: Modular, composable processing components
+**Flow-based architecture with first-class component types:**
+
+- **Inputs**: Ingest from any source (UDP, TCP, HTTP, WebSocket, File, NATS, custom)
+- **Processors**: Transform, enrich, extract, validate data at any point in the flow
+- **Outputs**: Send results anywhere (NATS, HTTP, files, databases, custom sinks)
+- **Storage**: Persist entities and graphs (NATS KV, custom backends)
+- **Gateways**: Expose query interfaces (GraphQL, REST, NATS subjects)
+
+**Build custom flows by composing components:**
+
+```yaml
+# Example: Multi-stage processing with branching
+inputs:
+  - type: udp_listener
+    port: 9001
+
+processors:
+  - type: json_parser
+  - type: entity_extractor
+  - type: relationship_builder
+  - type: semantic_enrichment  # Optional: hook in embeddings
+  - type: custom_validator     # Hook in your own logic
+
+outputs:
+  - type: nats_publisher
+  - type: http_webhook        # Send to multiple destinations
+
+storage:
+  - type: nats_kv             # Entity graph storage
+
+gateways:
+  - type: graphql             # Query interface
+  - type: rest_api            # Alternative query interface
+```
+
+**Hook in at any point**: Add processors, outputs, or custom logic anywhere in the flow to build exactly the processing flow you need.
 
 ### Graph Query & Search
 
@@ -129,43 +161,61 @@ docker compose -f docker-compose.dev.yml up
 
 ## Architecture Highlights
 
-### Stream Processing Pipeline
+### Component-Based Flow Architecture
 
-**Data flows through modular, composable components:**
+**SemStreams uses a flexible, composable component model:**
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                      Input Sources                           │
-│   UDP │ TCP │ HTTP │ WebSocket │ File │ NATS │ Custom      │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│                       Parsers                                │
-│      JSON │ CSV │ Binary │ Custom │ Streaming               │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│                   Graph Builder                              │
-│   Entity Extraction │ Relationship Discovery │ Validation   │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│                  Storage & Indexing                          │
-│   NATS KV │ Semantic Index │ Graph Index │ Communities      │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│                  Query Engines                               │
-│   PathRAG │ GraphRAG │ Semantic Search │ GraphQL │ REST     │
-└─────────────────────────────────────────────────────────────┘
+│                    INPUTS (Ingest)                           │
+│  UDP │ TCP │ HTTP │ WebSocket │ File │ NATS │ Custom        │
+└───────────────┬─────────────────────────────────────────────┘
+                │
+                ├─────────────────────────────────────┐
+                │                                     │
+┌───────────────▼────────┐              ┌─────────────▼──────┐
+│  PROCESSORS (Transform) │              │ PROCESSORS (Branch)│
+│  • Parser               │              │ • Filter           │
+│  • Entity Extractor     │              │ • Aggregator       │
+│  • Relationship Builder │              │ • Custom Logic     │
+│  • Validator            │              └─────────┬──────────┘
+│  • Enrichment           │                        │
+│  • Custom Hooks         │                        │
+└───────────┬─────────────┘                        │
+            │                                      │
+            ├──────────┬───────────────────────────┘
+            │          │
+┌───────────▼─────┐    ┌───▼────────┐
+│  STORAGE        │    │  OUTPUTS   │
+│  • NATS KV      │    │  • NATS    │
+│  • Graph Index  │    │  • HTTP    │
+│  • Communities  │    │  • File    │
+│  • Custom       │    │  • Custom  │
+└───────┬─────────┘    └────────────┘
+        │
+┌───────▼──────────────────────────────────────────────────────┐
+│                    GATEWAYS (Query)                           │
+│  GraphQL │ REST API │ NATS Subjects │ Custom Endpoints       │
+│    ↓          ↓            ↓                                  │
+│  PathRAG │ GraphRAG │ Semantic Search │ Direct Access        │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 **Key Design Principles:**
 
-- **Modular**: Each component is independently deployable
-- **Composable**: Mix and match to build custom flows
-- **Event-Driven**: NATS-based messaging throughout
-- **Resource-Aware**: Configurable limits for edge deployment
+- **Composable**: Chain, branch, and fork data flows as needed
+- **Pluggable**: Hook custom processors anywhere in the pipeline
+- **Multi-Output**: Send data to multiple destinations simultaneously
+- **Independently Deployable**: Each component can run standalone or distributed
+- **Event-Driven**: NATS-based messaging enables decoupled architecture
+- **Resource-Aware**: Configure limits per component for edge deployment
+
+**Example Flows:**
+
+- **IoT Edge**: UDP → Parser → Entity Extractor → Local NATS KV → Query via REST
+- **Data Integration**: Multiple inputs → Processor chain → Branch to both storage and webhook
+- **Distributed Processing**: Input on edge → NATS federation → Cloud storage → Query anywhere
+- **Custom Flow**: Your input → Your processors → SemStreams storage → PathRAG/GraphRAG queries
 
 ### Progressive Enhancement in Practice
 
