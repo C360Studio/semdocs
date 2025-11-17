@@ -11,14 +11,23 @@ SemStreams is a distributed semantic stream processing platform designed for edg
 **Core Capabilities:**
 
 - **Flow-Based Stream Processing**: Modular components for ingesting from any source (UDP, TCP, HTTP, WebSocket), parsing any format (JSON, CSV, raw bytes), and constructing semantic knowledge graphs
-- **GraphRAG**: Hierarchical community detection with local/global search (see [GraphRAG Guide](docs/guides/graphrag.md))
+
+- **Query Strategies** - Two complementary approaches:
+  - **PathRAG**: Graph traversal for tracing relationships (dependencies, impact chains, spatial connections) - See [PathRAG Guide](docs/guides/pathrag.md)
+  - **GraphRAG**: Hierarchical community detection for semantic similarity search (local/global modes) - See [GraphRAG Guide](docs/guides/graphrag.md)
+  - **Hybrid Queries**: Combine both for maximum context - See [Hybrid Patterns](docs/guides/hybrid-queries.md)
+  - **Not sure which to use?** Start with [Choosing Your Query Strategy](docs/guides/choosing-query-strategy.md)
+
+- **GraphRAG Architecture**:
   - **Zero-Dependency Core**: BM25 embeddings + statistical summaries (pure Go, works offline)
   - **Progressive Enhancement**: Optional HTTP embedder + async LLM enrichment when available
   - **Edge-Optimized Storage**: NATS KV replaces traditional vector/graph databases
-- **PathRAG**: Knowledge extraction using graph traversal patterns
-- **Semantic Search**: Vector embeddings + BM25 hybrid search
-- **Graph Clustering**: Community detection with label propagation
-- **Federation**: Distributed graph processing across multiple instances
+  - **Built on PathRAG Infrastructure**: Uses same graph storage and traversal capabilities
+
+- **Additional Capabilities**:
+  - **Semantic Search**: Vector embeddings + BM25 hybrid search
+  - **Graph Clustering**: Community detection with label propagation
+  - **Federation**: Distributed graph processing across multiple instances
 
 ## Ecosystem Components
 
@@ -60,9 +69,16 @@ docker compose -f docker-compose.dev.yml up
 
 ### 📖 [Guides](docs/guides/)
 
-- [GraphRAG Guide](docs/guides/graphrag.md) - Hierarchical community search (local/global)
+**Query Strategies** - Choosing the right approach:
+
+- [Choosing Your Query Strategy](docs/guides/choosing-query-strategy.md) - **START HERE** - Decision tree for PathRAG vs GraphRAG
+- [PathRAG Guide](docs/guides/pathrag.md) - Graph traversal for dependencies and relationships
+- [GraphRAG Guide](docs/guides/graphrag.md) - Hierarchical community search (local/global) for semantic similarity
+- [Hybrid Query Patterns](docs/guides/hybrid-queries.md) - Combining PathRAG + GraphRAG for maximum insight
+
+**Other Guides**:
+
 - [Federation Guide](docs/guides/federation.md) - Distributed graph processing
-- [PathRAG Guide](docs/guides/pathrag.md) - Knowledge extraction patterns
 - [Embedding Strategies](docs/guides/embedding-strategies.md) - Semantic search configuration
 - [Schema Tags](docs/guides/schema-tags.md) - Schema annotation system
 

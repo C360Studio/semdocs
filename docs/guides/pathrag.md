@@ -4,6 +4,21 @@
 **Package**: `graph/query`
 **HTTP Endpoint**: `POST /entity/:id/path`
 
+---
+
+## Not Sure If This Is the Right Tool?
+
+**PathRAG is for tracing RELATIONSHIPS** (dependencies, connections, impact chains).
+
+**If you need...**
+
+- **Semantically similar entities** → Use [GraphRAG](graphrag.md) instead
+- **System-wide pattern search** → Use [GraphRAG Global Search](graphrag.md#global-vs-local-search)
+- **Both relationships AND similarity** → See [Hybrid Query Patterns](hybrid-queries.md)
+- **Help choosing** → Read [Choosing Your Query Strategy](choosing-query-strategy.md)
+
+---
+
 ## Overview
 
 PathRAG (Path-based Retrieval-Augmented Generation) extends traditional semantic search by traversing entity relationships to discover contextually relevant information. Instead of relying solely on vector similarity, PathRAG explores the graph structure to find entities connected through meaningful relationships.

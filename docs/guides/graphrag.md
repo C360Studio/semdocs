@@ -4,6 +4,23 @@
 **Package**: `pkg/graphclustering`, `processor/graph/querymanager`
 **GraphQL API**: `localSearch`, `globalSearch`, `community`, `entityCommunity`
 
+---
+
+## Not Sure If This Is the Right Tool?
+
+**GraphRAG is for finding SEMANTIC SIMILARITY** (similar content, related topics, semantic clusters).
+
+**If you need...**
+
+- **Dependency chains or relationships** → Use [PathRAG](pathrag.md) instead
+- **Impact analysis or failure tracing** → Use [PathRAG](pathrag.md) instead
+- **Both relationships AND similarity** → See [Hybrid Query Patterns](hybrid-queries.md)
+- **Help choosing** → Read [Choosing Your Query Strategy](choosing-query-strategy.md)
+
+**GraphRAG builds on the same graph infrastructure as PathRAG**, using graph traversal to create semantic communities, then enabling fast search within/across those communities.
+
+---
+
 ## Overview
 
 GraphRAG (Graph Retrieval-Augmented Generation) combines hierarchical community detection with semantic search to enable both fast, focused queries (local search) and comprehensive, multi-community queries (global search). Unlike traditional RAG that searches a flat vector space, GraphRAG understands the graph's cluster structure.

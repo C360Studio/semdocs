@@ -1,6 +1,6 @@
 # Choosing Your Query Strategy
 
-**Making sense of PathRAG, GraphRAG, and when to use them together**
+## Making sense of PathRAG, GraphRAG, and when to use them together
 
 SemStreams provides two powerful query strategies that solve different problems. This guide helps you choose the right tool for your use case - or combine both for even better results.
 
@@ -32,6 +32,7 @@ What are you trying to find?
 **What it does**: Walks along relationships (edges) from a starting point
 
 **Think of it like**: Following a trail through the woods
+
 - You start at a specific tree
 - You follow marked paths (relationships)
 - You stop after a certain number of steps or time limit
@@ -48,6 +49,7 @@ What are you trying to find?
 ```
 
 **Returns**: Entities connected through explicit relationships:
+
 - `api-service` (depth 1) - directly depends on config
 - `auth-service` (depth 1) - directly depends on config
 - `mobile-app` (depth 2) - depends on api-service
@@ -58,6 +60,7 @@ What are you trying to find?
 **What it does**: Pre-groups entities into communities, then searches within/across communities
 
 **Think of it like**: Library sections
+
 - Books are organized into sections (communities)
 - You can browse within a section (local search)
 - Or search across all section summaries (global search)
@@ -78,6 +81,7 @@ query {
 ```
 
 **Returns**: Entities in the same semantic cluster:
+
 - `middleware/jwt.go` (similar content, same community)
 - `tests/auth_test.go` (related topic, same community)
 - `docs/authentication.md` (similar keywords, same community)
@@ -86,25 +90,30 @@ query {
 
 ## When to Use Each Strategy
 
-### Use PathRAG When...
+### Use PathRAG When
 
 ✅ **You have a specific starting entity**
+
 - "What does this service call?"
 - "What entities are near this drone?"
 
 ✅ **You need to trace relationships**
+
 - "Show me the dependency chain"
 - "What's the impact radius of this failure?"
 
 ✅ **Relationships are meaningful**
+
 - "Follow the `triggered_by` edges"
 - "Only traverse `depends_on` relationships"
 
 ✅ **You need real-time results with strict resource limits**
+
 - "Find related entities in under 200ms"
 - "Bounded by 100 nodes maximum"
 
 **PathRAG Examples:**
+
 ```bash
 # Dependency analysis
 POST /entity/api-service/path
@@ -119,23 +128,28 @@ POST /entity/alert-network-outage/path
 {"edge_filter": ["triggers", "affects"], "max_depth": 4}
 ```
 
-### Use GraphRAG Local Search When...
+### Use GraphRAG Local Search When
 
 ✅ **You want semantically similar entities**
+
 - "Show me code files similar to this one"
 - "Find related specs in this project"
 
 ✅ **You have a starting entity**
+
 - "What's in the same cluster as this PR?"
 
 ✅ **You want a focused, fast query**
+
 - "Search within this entity's community"
 
 ✅ **Semantic similarity matters more than explicit relationships**
+
 - "These entities share topics/keywords"
 - "Similar content, even without direct links"
 
 **GraphRAG Local Search Examples:**
+
 ```graphql
 # Find related specs for a PR review
 query {
@@ -156,20 +170,24 @@ query {
 }
 ```
 
-### Use GraphRAG Global Search When...
+### Use GraphRAG Global Search When
 
 ✅ **You DON'T have a specific starting entity**
+
 - "Show me all authentication code in the system"
 
 ✅ **You need comprehensive, system-wide results**
+
 - "Find patterns across all projects"
 - "What's in the system about microservices?"
 
 ✅ **You want diverse perspectives**
+
 - "Search across multiple communities"
 - "Show me different approaches to caching"
 
 **GraphRAG Global Search Examples:**
+
 ```graphql
 # System-wide pattern search
 query {
@@ -199,6 +217,7 @@ query {
 **Use Case**: Find relevant entities, then explore their connections
 
 **Workflow**:
+
 ```text
 1. GraphRAG Local Search → Find semantically similar entities
 2. PathRAG Expansion      → Explore relationships from top results
@@ -206,6 +225,7 @@ query {
 ```
 
 **Example**:
+
 ```javascript
 // Step 1: Find semantically similar entities
 const similar = await localSearch({
@@ -235,6 +255,7 @@ const results = mergeResults(similar, connected, {
 **Use Case**: Follow relationships, then understand the semantic cluster
 
 **Workflow**:
+
 ```text
 1. PathRAG               → Find connected entities
 2. GraphRAG Community    → See what community they're in
@@ -242,6 +263,7 @@ const results = mergeResults(similar, connected, {
 ```
 
 **Example**:
+
 ```javascript
 // Step 1: Follow dependency chain
 const deps = await pathQuery({
@@ -287,6 +309,7 @@ PathRAG  = Direct graph traversal for queries
 ```
 
 **They share the same underlying graph storage**:
+
 - Both read from: `ENTITY_STATES` bucket (NATS KV)
 - Both use: Same entity and edge data
 - PathRAG stores: Nothing (pure query-time)
@@ -299,6 +322,7 @@ PathRAG  = Direct graph traversal for queries
 **Question**: Do you want related code (relationships) or similar code (semantics)?
 
 - **Related code**: PathRAG
+
   ```json
   POST /entity/pr-1234/path
   {
@@ -308,6 +332,7 @@ PathRAG  = Direct graph traversal for queries
   ```
 
 - **Similar code**: GraphRAG Local Search
+
   ```graphql
   query {
     localSearch(
@@ -393,6 +418,7 @@ return [...docs.entities, ...similarDocs];
 ### Level 1: Start Simple
 
 **Just use PathRAG** if you:
+
 - Have explicit relationships in your data
 - Need dependency tracing
 - Want simple, fast queries
@@ -405,6 +431,7 @@ curl -X POST /entity/my-entity/path \
 ### Level 2: Add GraphRAG Local Search
 
 **Enable community detection** to unlock:
+
 - Semantic similarity search
 - Faster "find related" queries
 - Community-based organization
@@ -422,6 +449,7 @@ curl -X POST /entity/my-entity/path \
 ### Level 3: Use GraphRAG Global Search
 
 **Explore system-wide** patterns:
+
 - No starting entity needed
 - Cross-community queries
 - Comprehensive results
@@ -439,6 +467,7 @@ query {
 ### Level 4: Master Hybrid Queries
 
 **Combine strategies** for maximum insight:
+
 - Semantic + Structural
 - Fast initial results + comprehensive expansion
 - Best of both approaches
@@ -448,6 +477,7 @@ query {
 ### Pitfall 1: Using PathRAG for Semantic Search
 
 **Problem**: "Find code similar to this" with PathRAG
+
 ```json
 POST /entity/auth-module/path
 {"max_depth": 5}
@@ -456,6 +486,7 @@ POST /entity/auth-module/path
 **Why it fails**: PathRAG follows edges blindly, not semantic similarity
 
 **Solution**: Use GraphRAG Local Search
+
 ```graphql
 localSearch(entityID: "auth-module", query: "authentication", level: 1)
 ```
@@ -463,6 +494,7 @@ localSearch(entityID: "auth-module", query: "authentication", level: 1)
 ### Pitfall 2: Using GraphRAG for Dependency Chains
 
 **Problem**: "Trace dependencies" with GraphRAG
+
 ```graphql
 localSearch(entityID: "service-api", query: "dependencies", level: 1)
 ```
@@ -470,6 +502,7 @@ localSearch(entityID: "service-api", query: "dependencies", level: 1)
 **Why it fails**: GraphRAG finds semantically similar entities, not dependency chains
 
 **Solution**: Use PathRAG
+
 ```json
 POST /entity/service-api/path
 {"edge_filter": ["depends_on"], "max_depth": 5}
@@ -478,6 +511,7 @@ POST /entity/service-api/path
 ### Pitfall 3: Not Setting Resource Limits
 
 **Problem**: PathRAG query hangs
+
 ```json
 {"start_entity": "node-1", "max_depth": 10}
 ```
@@ -485,6 +519,7 @@ POST /entity/service-api/path
 **Why it fails**: Dense graphs explode without limits
 
 **Solution**: Always set `max_time` and `max_nodes`
+
 ```json
 {
   "start_entity": "node-1",
@@ -497,18 +532,22 @@ POST /entity/service-api/path
 ## Summary
 
 **PathRAG** = "Follow the relationships" (structural)
+
 - Start from entity → walk edges → find connected entities
 - Use for: Dependencies, impact analysis, spatial proximity
 
 **GraphRAG Local** = "Find similar in cluster" (semantic)
+
 - Start from entity → find community → search similar entities
 - Use for: Related code, similar docs, topic clustering
 
 **GraphRAG Global** = "Search everywhere" (semantic + comprehensive)
+
 - No starting point → search all communities → comprehensive results
 - Use for: System-wide patterns, exploratory queries
 
 **Hybrid** = "Best of both worlds"
+
 - Combine semantic and structural
 - Maximum context and relevance
 
