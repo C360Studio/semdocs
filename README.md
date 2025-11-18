@@ -116,6 +116,82 @@ if locatable, ok := msg.Payload().(Locatable); ok {
 
 See [Message System Guide](docs/guides/message-system.md) for details on creating custom payloads and using behavioral interfaces.
 
+### Dynamic Knowledge Graphs: Stream to Graph
+
+**SemStreams automatically builds and maintains knowledge graphs from streaming data** - no batch ETL, no manual modeling, just real-time semantic graphs.
+
+**How it works**:
+
+```text
+Incoming Stream        Entity Extraction       Knowledge Graph
+──────────────────    ─────────────────────    ───────────────────
+UDP packets      →    Graphable interface  →   Entity nodes
+JSON events      →    EntityID() method    →   + Properties
+WebSocket data   →    Triples() method     →   + Relationships
+NATS messages    →    Auto-storage         →   + Temporal metadata
+
+Result: Queryable semantic graph updated in real-time
+```
+
+**Key Characteristics**:
+
+1. **Dynamic** - Graphs update as data streams in (not batch processed)
+2. **Semantic** - Entities and relationships have meaning (via vocabulary)
+3. **Temporal** - Full history tracked (every update timestamped)
+4. **Queryable** - PathRAG for relationships, GraphRAG for semantic search
+5. **Federated** - Sync graphs across edge/cloud instances
+
+**Example: IoT Sensor Graph**
+
+```go
+// Incoming message (UDP packet from drone)
+msg := &DroneStatusMessage{
+    DroneID: "drone-001",
+    Battery: 85.5,
+    Location: LatLon{37.7749, -122.4194},
+}
+
+// Message implements Graphable → automatic graph construction
+triples := msg.Triples()
+// Returns:
+// [
+//   {Subject: "drone-001", Predicate: "robotics.battery.level", Object: 85.5},
+//   {Subject: "drone-001", Predicate: "geo.location.latitude", Object: 37.7749},
+//   {Subject: "drone-001", Predicate: "graph.rel.near", Object: "drone-002"},
+// ]
+
+// Stored in NATS KV → queryable via PathRAG/GraphRAG immediately
+```
+
+**From Stream to Graph in < 5ms**:
+
+1. Message arrives (UDP/TCP/WebSocket/NATS)
+2. `Graphable` interface extracts entities + relationships
+3. Triples persisted to NATS KV
+4. Graph indexes updated (PathRAG + GraphRAG)
+5. Ready for query
+
+**What you get**:
+
+- **Entity graph** - Nodes (drones, sensors, specs) with typed properties
+- **Relationship graph** - Edges (depends_on, near, implements) between entities
+- **Semantic index** - BM25/neural embeddings for similarity search
+- **Community structure** - LPA clustering for GraphRAG global search
+- **Temporal views** - Query graph state at any point in time
+
+**Why "dynamic" matters**:
+
+Traditional knowledge graphs require batch ETL pipelines that run hourly/daily. **SemStreams graphs update in real-time** as events happen - query the current state of your world, not yesterday's snapshot.
+
+**Use cases**:
+
+- **IoT**: Real-time device topology and status
+- **Robotics**: Mission planning with live fleet status
+- **DevOps**: Live service dependency graphs
+- **Knowledge management**: Continuously updated documentation graphs
+
+See [PathRAG Guide](docs/guides/pathrag.md) and [GraphRAG Guide](docs/guides/graphrag.md) for querying your dynamic knowledge graph.
+
 ### Semantic Vocabulary: The Knowledge Graph Language
 
 **Predicates define properties and relationships** in the knowledge graph using clean dotted notation.
