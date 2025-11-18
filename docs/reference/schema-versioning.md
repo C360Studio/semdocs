@@ -9,6 +9,7 @@ This document defines the versioning strategy for component configuration schema
 ### 1. **Schemas as Contracts**
 
 Component schemas are **contracts** between:
+
 - Component implementation and configuration
 - Backend API and frontend UI
 - Different instances of semstreams/semmem
@@ -32,6 +33,7 @@ This allows multiple versions to coexist during migrations.
 ## Current Version: v1
 
 All current schemas are version 1 (`v1`):
+
 - `udp.v1.json`
 - `graph-processor.v1.json`
 - `httppost.v1.json`

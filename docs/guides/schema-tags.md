@@ -1,8 +1,301 @@
 # Schema Tags Developer Guide
 
+## What Are Schema Tags?
+
+Schema tags are Go struct field tags that **define configuration schemas directly in your code**. Instead of maintaining separate JSON Schema files, you annotate your Go configuration structs with `schema:` tags, and the schema is automatically generated.
+
+**The Problem They Solve:**
+
+```go
+// You have a configuration struct
+type Config struct {
+    Port    int
+    Timeout int
+}
+
+// You need a JSON Schema for validation, documentation, UI generation
+// Option 1: Maintain separate schema.json file (gets out of sync!)
+// Option 2: Schema tags - define schema IN the code (single source of truth!)
+```
+
+**With schema tags:**
+
+```go
+type Config struct {
+    Port    int `schema:"type:int,desc:Server port,min:1,max:65535,default:8080"`
+    Timeout int `schema:"type:int,desc:Timeout in seconds,default:30"`
+}
+
+// Automatically generates:
+// - JSON Schema for validation
+// - OpenAPI specification
+// - UI metadata for flow builder
+// - Documentation
+```
+
+## How Tags Become Schema
+
+### The Generation Process
+
+**1. You write Go code with schema tags:**
+
+```go
+type UDPConfig struct {
+    Port   int    `schema:"type:int,desc:UDP port to listen on,min:1,max:65535,default:14550"`
+    Buffer int    `schema:"type:int,desc:Buffer size in bytes,default:8192"`
+}
+```
+
+**2. Schema exporter runs (via `task schema:generate` or compile-time):**
+
+```go
+// component.ExtractSchema() reflects on the struct
+schema := component.ExtractSchema(UDPConfig{})
+```
+
+**3. JSON Schema is generated:**
+
+```json
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "port": {
+            "type": "number",
+            "description": "UDP port to listen on",
+            "minimum": 1,
+            "maximum": 65535,
+            "default": 14550
+        },
+        "buffer": {
+            "type": "number",
+            "description": "Buffer size in bytes",
+            "default": 8192
+        }
+    }
+}
+```
+
+**4. Schema is used for:**
+
+- **Validation**: Incoming configurations are validated against the schema
+- **Documentation**: Auto-generated API docs reference the schema
+- **UI**: Flow builder uses schema to generate configuration forms
+- **OpenAPI**: Schema becomes part of OpenAPI spec
+
+### Runtime vs. Build-time
+
+Schema extraction happens at different times:
+
+```text
+Development:  task schema:generate → schemas/ directory
+Runtime:      component.ConfigSchema() → returns schema on demand
+Build:        go generate → embeds schemas in binary
+Testing:      go test ./test/contract → validates schemas
+```
+
+**Schemas are:**
+
+- ✅ Generated from code (single source of truth)
+- ✅ Validated at build time
+- ✅ Available at runtime for dynamic validation
+- ✅ Embedded in OpenAPI specs
+
+## Why This Direction?
+
+### Schema-as-Code vs. Schema-as-Files
+
+We chose schema tags (schema-as-code) over separate JSON Schema files for several compelling reasons:
+
+**1. Single Source of Truth**
+
+```go
+// ❌ OLD WAY: Two places to maintain
+// config.go
+type Config struct {
+    Port int
+}
+
+// schema.json - can get out of sync!
+{
+    "properties": {
+        "port": {"type": "number", "description": "Server port"}
+    }
+}
+```
+
+```go
+// ✅ NEW WAY: Schema lives with code
+type Config struct {
+    Port int `schema:"type:int,desc:Server port,min:1,max:65535"`
+}
+// Schema is ALWAYS in sync because it's in the same place!
+```
+
+**2. Type Safety**
+
+```go
+// Schema tags are checked at compile time
+type Config struct {
+    // Go compiler ensures this is an int
+    Port int `schema:"type:int,desc:Server port"`
+}
+
+// Separate JSON schema has no compile-time checks:
+// {"port": {"type": "string"}}  ← Oops, wrong type! Won't know until runtime.
+```
+
+**3. Developer Experience**
+
+```go
+// Schema is visible right where you define the struct
+type Config struct {
+    Port int `schema:"type:int,desc:Server port,default:8080"`
+    //          ↑ See the schema while writing code!
+}
+
+// vs. switching between config.go and schema.json files
+```
+
+**4. Refactoring Safety**
+
+```go
+// Rename a field? Schema is automatically updated
+type Config struct {
+    // Renamed: Port → ListenPort
+    ListenPort int `schema:"type:int,desc:Server port"`
+}
+// Schema automatically reflects new field name
+
+// With separate JSON schema, you'd have to:
+// 1. Rename in Go code
+// 2. Remember to update schema.json
+// 3. Hope you didn't miss it!
+```
+
+**5. Discoverability**
+
+```go
+// New developers see configuration AND schema together
+type Config struct {
+    Timeout int `schema:"type:int,desc:Connection timeout in seconds,default:30"`
+    //                      ↑ Self-documenting!
+}
+
+// vs. "where's the schema file for this config?"
+```
+
+**6. Validation at Multiple Levels**
+
+```go
+// Schema tags enable validation at different points:
+// 1. Build time: schema:generate checks tag syntax
+// 2. Test time: contract tests validate schemas
+// 3. Runtime: configuration validated against schema
+// All from a single tag definition!
+```
+
+### Comparison Table
+
+| Aspect | Separate JSON Schema | Schema Tags |
+|--------|---------------------|-------------|
+| **Source of Truth** | Split (code + file) | Single (code) |
+| **Sync Issues** | Common (files drift) | Never (same place) |
+| **Type Safety** | Runtime only | Compile + runtime |
+| **Refactoring** | Manual, error-prone | Automatic |
+| **Discoverability** | Need to find file | Visible in code |
+| **Maintenance** | Two places to update | One place |
+| **Generated Docs** | Manual mapping | Automatic |
+| **IDE Support** | Limited | Full (struct tags) |
+
+### What We Gave Up (And Why It's Worth It)
+
+**Trade-offs of schema-as-code:**
+
+- ❌ **Can't define complex JSON Schema constructs** - Schema tags support common patterns, not advanced JSON Schema features
+- ❌ **Tied to Go reflection** - Schema extraction uses reflection, slight runtime cost
+- ❌ **Tag syntax learning curve** - Developers need to learn tag format
+
+**Why it's worth it:**
+
+- ✅ **99% of use cases covered** - Common validation patterns are supported
+- ✅ **Reflection cost is negligible** - One-time cost at component registration
+- ✅ **Tag syntax is simple** - `type:int,desc:My field` is readable
+- ✅ **DRY principle** - Don't repeat yourself between code and schema
+- ✅ **Refactoring safety** - Compiler helps catch errors
+
+### Real-World Example
+
+**Before (separate schema):**
+
+```text
+project/
+  input/udp/
+    config.go         ← Config struct
+    schema.json       ← JSON Schema (manual)
+    component.go      ← Component implementation
+```
+
+```go
+// config.go
+type Config struct {
+    Port   int
+    Buffer int
+}
+```
+
+```json
+// schema.json - MANUALLY maintained!
+{
+    "properties": {
+        "port": {
+            "type": "number",
+            "description": "UDP port",
+            "minimum": 1,
+            "maximum": 65535
+        },
+        "buffer": {
+            "type": "number",
+            "description": "Buffer size"
+        }
+    }
+}
+```
+
+**After (schema tags):**
+
+```text
+project/
+  input/udp/
+    config.go         ← Config struct WITH schema tags
+    component.go      ← Component implementation
+  schemas/
+    udp.v1.json       ← GENERATED schema (automatic)
+```
+
+```go
+// config.go - SINGLE source of truth
+type Config struct {
+    Port   int `schema:"type:int,desc:UDP port to listen on,min:1,max:65535,default:14550"`
+    Buffer int `schema:"type:int,desc:Buffer size in bytes,default:8192"`
+}
+
+func (u *UDP) ConfigSchema() component.ConfigSchema {
+    return component.ExtractSchema(Config{})
+    //     ↑ Schema extracted from tags automatically
+}
+```
+
+**Result:**
+
+- ✅ One file to maintain (config.go)
+- ✅ Schema auto-generated in schemas/udp.v1.json
+- ✅ Impossible for code and schema to be out of sync
+- ✅ Refactoring is safe (rename field = schema updates automatically)
+
 ## Overview
 
-Schema tags are Go struct field tags that define how component configuration fields are exposed in JSON Schemas and the OpenAPI specification. This guide shows you how to write effective schema tags for your components.
+Schema tags enable **declarative schema definition** directly in your Go code. This guide shows you how to write effective schema tags for your components.
 
 ## Basic Syntax
 
@@ -25,6 +318,7 @@ type Config struct {
 Specifies the JSON Schema type for the field.
 
 **Supported Types**:
+
 - `string` - Text values
 - `int` - Integer numbers
 - `float` - Floating point numbers
@@ -36,6 +330,7 @@ Specifies the JSON Schema type for the field.
 - `cache` - Special type for cache configuration
 
 **Example**:
+
 ```go
 type Config struct {
     Name     string  `schema:"type:string,desc:Component name"`
@@ -50,12 +345,14 @@ type Config struct {
 Human-readable description of the field's purpose.
 
 **Best Practices**:
+
 - Be concise but clear
 - Explain the field's purpose, not just its name
 - Include units if applicable (e.g., "Timeout in seconds")
 - Mention defaults if important
 
 **Examples**:
+
 ```go
 // ❌ Bad - just repeats field name
 Timeout int `schema:"type:int,desc:Timeout"`
@@ -74,6 +371,7 @@ MaxRetries int `schema:"type:int,desc:Maximum retry attempts before failing"`
 Specifies the default value if the field is omitted.
 
 **Examples**:
+
 ```go
 type Config struct {
     Host    string `schema:"type:string,desc:Server hostname,default:localhost"`
@@ -83,6 +381,7 @@ type Config struct {
 ```
 
 **Generated JSON Schema**:
+
 ```json
 {
     "properties": {
@@ -105,6 +404,7 @@ type Config struct {
 Specify minimum and maximum values for numeric fields.
 
 **Examples**:
+
 ```go
 type Config struct {
     Port       int `schema:"type:int,desc:Server port,min:1,max:65535"`
@@ -118,6 +418,7 @@ type Config struct {
 Restricts field to specific allowed values.
 
 **Example**:
+
 ```go
 type Config struct {
     LogLevel string `schema:"type:enum,desc:Logging level,enum:debug|info|warn|error"`
@@ -126,6 +427,7 @@ type Config struct {
 ```
 
 **Generated JSON Schema**:
+
 ```json
 {
     "properties": {
@@ -143,10 +445,12 @@ type Config struct {
 Groups fields for better UI organization.
 
 **Values**:
+
 - `basic` - Essential configuration (shown by default)
 - `advanced` - Advanced settings (collapsed by default)
 
 **Example**:
+
 ```go
 type Config struct {
     // Basic settings
@@ -167,6 +471,7 @@ type Config struct {
 Use `type:ports` for NATS port configuration fields.
 
 **Example**:
+
 ```go
 type ProcessorConfig struct {
     Ports component.Ports `schema:"type:ports,desc:Input and output ports"`
@@ -174,6 +479,7 @@ type ProcessorConfig struct {
 ```
 
 **What This Generates**:
+
 - Validates port structure (Input/Output maps)
 - Includes port metadata in schema
 - Provides proper JSON Schema for port configuration
@@ -183,6 +489,7 @@ type ProcessorConfig struct {
 Use `type:cache` for cache/KV bucket configuration.
 
 **Example**:
+
 ```go
 type ProcessorConfig struct {
     Cache component.Cache `schema:"type:cache,desc:State storage configuration"`
@@ -208,6 +515,7 @@ func (u *UDP) ConfigSchema() component.ConfigSchema {
 ```
 
 **Generated Schema**:
+
 ```json
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -402,6 +710,7 @@ cat schemas/your-component.v1.json
 ```
 
 Verify:
+
 - All fields have proper types
 - Descriptions are clear
 - Constraints are correct
@@ -414,6 +723,7 @@ Verify:
 **Problem**: Component schema not appearing in `schemas/` directory
 
 **Solution**:
+
 1. Ensure `ConfigSchema()` method is implemented
 2. Check component is registered in `componentregistry/register.go`
 3. Run `task schema:generate`
@@ -423,7 +733,9 @@ Verify:
 **Problem**: Schema validation fails
 
 **Solution**:
+
 Check for:
+
 - Missing required tags (`type`, `desc`)
 - Invalid enum syntax (use `|` separator)
 - Invalid constraints (min > max)
@@ -434,7 +746,9 @@ Check for:
 **Problem**: Go type doesn't map correctly to JSON Schema
 
 **Solution**:
+
 Use explicit `type:` tag:
+
 ```go
 // Explicit type for clarity
 Count int64 `schema:"type:int,desc:Item count"`
@@ -448,6 +762,7 @@ Tags []string `schema:"type:array,desc:Tag list"`
 If you have existing manual JSON schemas, convert them to schema tags:
 
 **Before** (manual JSON):
+
 ```json
 {
     "properties": {
@@ -463,6 +778,7 @@ If you have existing manual JSON schemas, convert them to schema tags:
 ```
 
 **After** (schema tags):
+
 ```go
 type Config struct {
     Port int `schema:"type:int,desc:Server port,min:1,max:65535,default:8080"`
@@ -481,6 +797,7 @@ See `docs/MIGRATION_GUIDE.md` for detailed migration instructions.
 ## Summary
 
 **Key Points**:
+
 - Always use `type:` and `desc:` tags
 - Add constraints (`min`, `max`, `enum`) for validation
 - Provide sensible `default:` values
@@ -488,6 +805,7 @@ See `docs/MIGRATION_GUIDE.md` for detailed migration instructions.
 - Test with `task schema:generate` and `go test ./test/contract`
 
 **Tag Template**:
+
 ```go
 FieldName Type `schema:"type:jsontype,desc:Clear description,default:value,min:X,max:Y,category:basic|advanced"`
 ```

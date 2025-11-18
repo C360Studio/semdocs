@@ -11,6 +11,7 @@ SemStreams supports optional containerized microservices that enhance functional
 **Provides**: Neural text embeddings via SemEmbed (lightweight Rust-based service using fastembed-rs)
 
 **What is SemEmbed?**
+
 - Lightweight embedding service built on fastembed-rs
 - OpenAI-compatible API (/v1/embeddings endpoint)
 - Optimized for performance with Rust and ONNX runtime
@@ -19,6 +20,7 @@ SemStreams supports optional containerized microservices that enhance functional
 - Smaller memory footprint than alternatives (~512MB-1GB vs 2GB+)
 
 **Default Behavior**:
+
 - Semantic search is **enabled by default** using BM25 (pure Go lexical search)
 - No external service required
 - Performance: ~1.4μs per text
@@ -27,6 +29,7 @@ SemStreams supports optional containerized microservices that enhance functional
 **Upgrade to Neural Embeddings (SemEmbed)**:
 
 1. **Start SemEmbed service** (one command):
+
    ```bash
    task services:start:embedding
    # or
@@ -34,6 +37,7 @@ SemStreams supports optional containerized microservices that enhance functional
    ```
 
 2. **Configure SemStreams** to use SemEmbed:
+
    ```json
    {
      "indexmanager": {
@@ -58,6 +62,7 @@ SemStreams supports optional containerized microservices that enhance functional
 **Alternative**: TEI (Text Embeddings Inference) from Hugging Face can be used instead - see Dockerfile.tei for setup
 
 **Explicit BM25 Only** (if you want to skip HTTP attempt):
+
 ```json
 {
   "indexmanager": {
@@ -70,6 +75,7 @@ SemStreams supports optional containerized microservices that enhance functional
 ```
 
 **Model Selection** (edit `docker-compose.services.yml`):
+
 ```yaml
 environment:
   # Fast, good quality (default)
@@ -87,10 +93,12 @@ environment:
 ```
 
 **Performance Comparison**:
+
 - **BM25** (default): Fast (~1.4μs), works offline, exact keyword matching
 - **SemEmbed Neural**: Better semantic understanding, synonyms, concepts (~50-100ms per batch)
 
 **Graceful Degradation**:
+
 - **HTTP provider**: Automatically falls back to BM25 if SemEmbed is unavailable (seamless)
 - **BM25 provider**: Always works (no external dependencies)
 - All other indexing (predicate, spatial, temporal, etc.) continues normally regardless of embedding provider
@@ -102,6 +110,7 @@ environment:
 **Provides**: LLM-based natural language summaries via SemSummarize (lightweight Rust-based service using Candle + T5/BART)
 
 **What is SemSummarize?**
+
 - Lightweight summarization service built on Candle (Rust ML framework)
 - Supports T5 and BART models from HuggingFace Hub
 - Native arm64 + amd64 support with CPU-optimized inference
@@ -109,6 +118,7 @@ environment:
 - Used for GraphRAG community summarization
 
 **Default Behavior**:
+
 - Community summarization is **enabled by default** using statistical methods
 - No external service required
 - Generates summaries from entity types, properties, and keywords
@@ -117,6 +127,7 @@ environment:
 **Upgrade to LLM Summarization (SemSummarize)**:
 
 1. **Start SemSummarize service** (one command):
+
    ```bash
    task services:start:summarization
    # or
@@ -124,6 +135,7 @@ environment:
    ```
 
 2. **Use in code** (GraphRAG community detection):
+
    ```go
    // Create LLM summarizer pointing to semsummarize service
    llmSummarizer := graphclustering.NewHTTPLLMSummarizer("http://localhost:8083")
@@ -148,6 +160,7 @@ environment:
 **Automatic Fallback**: If SemSummarize service is unavailable, automatically falls back to statistical summarization (no disruption)
 
 **Model Selection** (edit `docker-compose.services.yml`):
+
 ```yaml
 environment:
   # Fast, good quality (default)
@@ -161,15 +174,18 @@ environment:
 ```
 
 **Performance Comparison**:
+
 - **Statistical** (default): Fast (<1ms), deterministic, keyword-based
 - **SemSummarize LLM**: Natural language, contextual understanding (~500ms-2s per summary)
 
 **Use Cases**:
+
 - GraphRAG community summarization (better understanding of entity clusters)
 - Generating human-readable descriptions of graph neighborhoods
 - Creating narrative summaries for monitoring dashboards
 
 **Graceful Degradation**:
+
 - **HTTP LLM**: Automatically falls back to statistical if SemSummarize is unavailable (seamless)
 - **Statistical**: Always works (no external dependencies)
 - GraphRAG search works normally regardless of summarization provider
@@ -181,18 +197,21 @@ environment:
 SemStreams implements a **three-tier security model** that balances simplicity with enterprise PKI needs:
 
 #### Tier 1: None (Default) - ✅ Current Implementation
+
 - **Use Case**: Development, local testing, trusted internal networks
 - **Configuration**: No security configuration required
 - **Security**: Plaintext communication (acceptable for dev/trusted networks)
 - **Complexity**: Zero configuration
 
 #### Tier 2: Manual TLS + mTLS - 🔨 Planned (5 days)
+
 - **Use Case**: 1-2 locations, existing PKI infrastructure, small deployments
 - **Security**: TLS encryption + optional mutual authentication (zero-trust)
 - **Complexity**: Medium (manual certificate generation and renewal)
 - **Certificate Lifecycle**: Manual renewal (typically 90 days)
 
 **Configuration Example** (Manual TLS):
+
 ```json
 {
   "security": {
@@ -212,6 +231,7 @@ SemStreams implements a **three-tier security model** that balances simplicity w
 ```
 
 **Configuration Example** (Manual TLS + mTLS):
+
 ```json
 {
   "security": {
@@ -241,18 +261,21 @@ SemStreams implements a **three-tier security model** that balances simplicity w
 ```
 
 **Benefits**:
+
 - Zero-trust security for federated WebSocket connections
 - Client certificate validation (only authorized clients can connect)
 - CN-based access control (whitelist specific locations)
 - Backward compatible with existing manual TLS configs
 
-#### Tier 3: Automated PKI (step-ca + ACME) - 📋 Planned (18 days additional)
+#### Tier 3: Automated PKI (step-ca + ACME) 
+
 - **Use Case**: 3+ locations, enterprise scale, limited PKI expertise
 - **Security**: Full PKI automation with mTLS and federation support
 - **Complexity**: High initial setup, low ongoing maintenance
 - **Certificate Lifecycle**: Automated 24-hour renewal (no manual intervention)
 
 **Configuration Example** (ACME):
+
 ```json
 {
   "security": {
@@ -282,7 +305,8 @@ SemStreams implements a **three-tier security model** that balances simplicity w
 ```
 
 **Federation Architecture**:
-```
+
+```shell
 Corporate Root CA (offline)
     │
     ├─── Location A: step-ca (intermediate) → SemStreams A
@@ -293,6 +317,7 @@ All locations automatically trust each other's certificates
 ```
 
 **Benefits**:
+
 - Set-and-forget certificate renewal (automated every 16 hours)
 - Short-lived certificates (24h) eliminate revocation complexity
 - Built-in federation support for multi-location deployments
@@ -300,17 +325,12 @@ All locations automatically trust each other's certificates
 - Zero manual intervention for certificate lifecycle
 
 **Start step-ca** (when Tier 3 is implemented):
+
 ```bash
 task services:start:tls
 # or
 docker compose -f docker-compose.services.yml --profile tls up -d
 ```
-
-**Implementation Status**:
-- **ADR**: See `docs/architecture/ADR-001-tiered-security-step-ca.md` for complete analysis
-- **Epic**: `semstreams-83ff` - Tiered Security Architecture
-- **Tier 2**: `semstreams-p1ti` - mTLS Support (5 days estimated)
-- **Tier 3**: `semstreams-vpw8` - ACME Integration (18 days estimated)
 
 **Tier Comparison**:
 
@@ -324,11 +344,13 @@ docker compose -f docker-compose.services.yml --profile tls up -d
 | **Best For** | Dev/testing | 1-2 locations | 3+ locations |
 
 **Recommendation**:
+
 - **1-2 locations**: Use Tier 2 (manual certificates with optional mTLS)
 - **3+ locations**: Use Tier 3 (ACME automation provides ROI within first year)
 - **Existing PKI**: Use Tier 2 with corporate CA-issued certificates
 
 **Graceful Degradation**:
+
 - Tier 2: TLS components work with manually-managed certificates (standard OpenSSL workflow)
 - Tier 3: ACME failure automatically falls back to manual certificates if configured
 - All tiers: System operates without TLS if security not configured (Tier 1 default)
@@ -338,21 +360,25 @@ docker compose -f docker-compose.services.yml --profile tls up -d
 **Optional**: Provides local metrics collection and visualization
 
 **Provides**:
+
 - Prometheus metrics scraping and storage
 - Pre-configured Grafana dashboards
 - Real-time monitoring of SemStreams components
 
 **Components**:
+
 - **Prometheus**: Metrics collection server (port 9090)
 - **Grafana**: Visualization and dashboards (port 3000)
 
 **Pre-configured Dashboards**:
+
 1. **SemStreams Overview**: Service health, throughput, error rates, latency
 2. **Cache Performance**: L1/L2/L3 hit rates, sizes, eviction rates
 3. **IndexManager Metrics**: Index sizes, query latency, backlog, deduplication
 4. **Graph Processor**: Entity/edge operations, latency, worker pool status
 
 **Configuration**:
+
 ```json
 {
   "metrics": {
@@ -364,6 +390,7 @@ docker compose -f docker-compose.services.yml --profile tls up -d
 ```
 
 **Start**:
+
 ```bash
 task services:start:observability
 # or
@@ -371,11 +398,13 @@ docker compose -f docker-compose.services.yml --profile observability up -d
 ```
 
 **Access**:
+
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000 (default credentials: admin/admin)
 - Change password on first login via: `GRAFANA_PASSWORD=<your-password>`
 
 **Custom Config**:
+
 - Edit `configs/prometheus/prometheus.yml` to add scrape targets
 - Edit dashboards in `configs/grafana/dashboards/*.json`
 - Changes take effect on restart
@@ -437,7 +466,7 @@ SemStreams follows the **Zero-Config Semantic Search** pattern:
 
 ### Provider Resolution Flow
 
-```
+```text
 ┌─────────────────────────────────────┐
 │ IndexManager.initializeSemanticSearch│
 └────────────┬────────────────────────┘
@@ -493,7 +522,8 @@ if testErr != nil {
 ```
 
 **Log output example:**
-```
+
+```shell
 WARN HTTP embedding service unavailable - falling back to BM25
   endpoint=http://localhost:8081
   error=connection refused
@@ -511,6 +541,7 @@ INFO Fallback to BM25 embedder successful
 To add a new optional service:
 
 1. **Add to `docker-compose.services.yml`**:
+
    ```yaml
    services:
      myservice:
@@ -520,6 +551,7 @@ To add a new optional service:
    ```
 
 2. **Add Taskfile commands**:
+
    ```yaml
    services:start:myservice:
      desc: Start my service
@@ -563,6 +595,7 @@ docker compose -f docker-compose.services.yml logs -f semembed
 ```
 
 **Common issues:**
+
 - **Port conflict**: Another service using port 8081
 - **Memory**: SemEmbed needs ~512MB-1GB RAM depending on model
 - **First start**: Model download can take 1-2 minutes (one-time, cached to volume)
@@ -570,6 +603,7 @@ docker compose -f docker-compose.services.yml logs -f semembed
 ### Semantic search not working
 
 1. **Check service is running**:
+
    ```bash
    task services:status
    # or
@@ -577,12 +611,14 @@ docker compose -f docker-compose.services.yml logs -f semembed
    ```
 
 2. **Check IndexManager logs** for connectivity warnings:
+
    ```bash
    # Look for fallback messages
    grep "fallback to BM25" logs/semstreams.log
    ```
 
 3. **Verify configuration**:
+
    ```json
    {
      "embedding": {

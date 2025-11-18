@@ -584,24 +584,45 @@ query {
 }
 ```
 
-## References
-
-- **Implementation**: `pkg/graphclustering` (LPA algorithm)
-- **Storage**: `pkg/graphclustering/storage.go` (NATS KV integration)
-- **Query API**: `processor/graph/querymanager/graphrag_search.go`
-- **GraphQL**: `cmd/semstreams-gqlgen` (code generator)
-- **Example**: `semmem/` (production GraphRAG deployment)
-
 ## Next Steps
 
-1. **Try It**: Use SemMem as reference implementation
+1. **Try It**: Use [SemMem](https://github.com/c360/semmem) as reference implementation
 2. **Tune It**: Adjust hierarchy levels for your graph
 3. **Enhance It**: Enable HTTP embedder when ready
 4. **Scale It**: Use NATS federation for distributed deployment
 
+## Related Documentation
+
+**Query Strategy Guides**:
+
+- [Choosing Your Query Strategy](choosing-query-strategy.md) - Decision tree for PathRAG vs GraphRAG
+- [PathRAG Guide](pathrag.md) - Graph traversal for dependencies and relationships
+- [Hybrid Query Patterns](hybrid-queries.md) - Combining PathRAG + GraphRAG
+
+**System Guides**:
+
+- [Embedding Strategies](embedding-strategies.md) - BM25 vs HTTP embedder configuration
+- [Message System](message-system.md) - How data flows through SemStreams
+- [Vocabulary System](vocabulary-system.md) - Semantic predicates and graph language
+- [Federation Guide](federation.md) - Distributed GraphRAG across instances
+
+**Integration**:
+
+- [GraphQL API](../integration/graphql-api.md) - GraphQL endpoint contracts
+- [REST API](../integration/rest-api.md) - OpenAPI specifications
+- [NATS Events](../integration/nats-events.md) - Event schemas and messaging
+
+**Architecture**:
+
+- [Architecture Overview](../getting-started/architecture.md) - High-level system design
+
 ---
 
-**Related Guides**:
-- [PathRAG Guide](pathrag.md) - Graph traversal patterns (complements GraphRAG)
-- [Embedding Strategies](embedding-strategies.md) - BM25 vs HTTP embedder configuration
-- [Federation Guide](federation.md) - Distributed GraphRAG across instances
+**Implementation**: See [semstreams](https://github.com/c360/semstreams) repository
+
+- Algorithm: `pkg/graphclustering` (LPA community detection)
+- Storage: `pkg/graphclustering/storage.go` (NATS KV integration)
+- Query API: `processor/graph/querymanager/graphrag_search.go`
+- GraphQL: `cmd/semstreams-gqlgen` (code generator)
+
+**Reference Implementation**: [SemMem](https://github.com/c360/semmem) (production GraphRAG deployment)

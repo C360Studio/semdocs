@@ -53,6 +53,134 @@ gateways:
 
 **Hook in at any point**: Add processors, outputs, or custom logic anywhere in the flow to build exactly the processing flow you need.
 
+### How Data Flows: The Message System
+
+**All data in SemStreams flows as structured messages** - not raw bytes or untyped JSON, but typed, validated containers with behavioral capabilities.
+
+**Message Structure:**
+
+```go
+type Message interface {
+    ID() string            // Unique identifier (UUID)
+    Type() Type           // Schema (domain.category.version)
+    Payload() Payload     // Your data + optional behaviors
+    Meta() Meta          // Timestamps, source, federation info
+    Hash() string        // Content-based deduplication
+    Validate() error     // Validation at message + payload level
+}
+```
+
+**Type System** enables routing and schema evolution:
+
+```go
+Type{
+    Domain:   "sensors",      // Data domain
+    Category: "temperature",  // Message category
+    Version:  "v1",          // Schema version
+}
+// Results in NATS subject: "sensors.temperature.v1"
+```
+
+**Behavioral Interfaces** - Messages discover capabilities at runtime:
+
+- **Graphable**: Entities for knowledge graph storage (`EntityID()`, `Triples()`)
+- **Locatable**: Geographic coordinates for spatial indexing (`Location()`)
+- **Timeable**: Event timestamps for time-series (`Timestamp()`)
+- **Observable**: Sensor readings (`ObservedEntity()`, `ObservedValue()`)
+- **Correlatable**: Distributed tracing (`CorrelationID()`, `TraceID()`)
+- **Processable**: Priority and deadlines (`Priority()`, `Deadline()`)
+
+**Runtime capability discovery:**
+
+```go
+// Components discover what messages can do
+if graphable, ok := msg.Payload().(Graphable); ok {
+    entityID := graphable.EntityID()
+    triples := graphable.Triples()
+    // Store in knowledge graph
+}
+
+if locatable, ok := msg.Payload().(Locatable); ok {
+    lat, lon := locatable.Location()
+    // Build spatial index
+}
+```
+
+**Why this matters:**
+
+- ✅ **Type-safe** - Compile-time safety with runtime flexibility
+- ✅ **Extensible** - Add new behaviors without breaking existing code
+- ✅ **Routable** - Message types map directly to NATS subjects
+- ✅ **Discoverable** - Components learn what messages can do at runtime
+- ✅ **Validated** - Messages validate themselves before processing
+
+See [Message System Guide](docs/guides/message-system.md) for details on creating custom payloads and using behavioral interfaces.
+
+### Semantic Vocabulary: The Knowledge Graph Language
+
+**Predicates define properties and relationships** in the knowledge graph using clean dotted notation.
+
+**Pragmatic Semantic Web Approach:**
+
+- **Internal**: Dotted notation everywhere (`domain.category.property`)
+- **External**: Optional IRI mappings for standards compliance
+- **No Leakage**: Standards complexity stays at API boundaries
+
+**Predicate Structure:**
+
+```go
+"sensor.temperature.celsius"   // domain.category.property
+"geo.location.latitude"        // Clean, human-readable
+"graph.rel.depends_on"         // Relationship predicate
+```
+
+**NATS-Friendly Wildcards:**
+
+```go
+// Query all temperature predicates
+nc.Subscribe("sensor.temperature.*", handler)
+
+// Query entire sensor domain
+nc.Subscribe("sensor.>", handler)
+```
+
+**Standard Vocabulary Support** - Optional IRI mappings for RDF/OGC export:
+
+- **OWL**: `owl:sameAs`, `owl:equivalentClass`
+- **SKOS**: `skos:prefLabel`, `skos:altLabel`
+- **Dublin Core**: `dc:identifier`, `dc:references`
+- **Schema.org**: `schema:name`, `schema:sameAs`
+- **SSN/SOSA**: Sensor ontology for IoT/robotics
+
+**Define custom vocabularies:**
+
+```go
+const BatteryLevel = "robotics.battery.level"
+
+func init() {
+    vocabulary.Register(BatteryLevel,
+        vocabulary.WithDescription("Battery charge percentage"),
+        vocabulary.WithDataType("float64"),
+        vocabulary.WithUnits("percent"),
+        vocabulary.WithRange("0-100"),
+        vocabulary.WithIRI("http://schema.org/batteryLevel"))  // Optional
+}
+```
+
+**Use in triples:**
+
+```go
+triple := message.Triple{
+    Subject:   droneID,
+    Predicate: BatteryLevel,  // Dotted notation
+    Object:    85.5,
+}
+// Internal: "robotics.battery.level"
+// RDF export: "http://schema.org/batteryLevel" (if mapped)
+```
+
+See [Vocabulary System Guide](docs/guides/vocabulary-system.md) for predicate registration, alias types, and standards mappings.
+
 ### Graph Query & Search
 
 - **PathRAG**: Fast graph traversal for tracing dependencies, impact chains, and spatial relationships ([guide](docs/guides/pathrag.md))
@@ -116,6 +244,11 @@ docker compose -f docker-compose.dev.yml up
 
 ### 📖 [Guides](docs/guides/)
 
+**Core Concepts**:
+
+- [Message System Guide](docs/guides/message-system.md) - How data flows through SemStreams (typed messages, behavioral interfaces)
+- [Vocabulary System Guide](docs/guides/vocabulary-system.md) - Semantic predicates for the knowledge graph (dotted notation, IRI mappings)
+
 **Query Strategies** - Choosing the right approach:
 
 - [Choosing Your Query Strategy](docs/guides/choosing-query-strategy.md) - **START HERE** - Decision tree for PathRAG vs GraphRAG
@@ -129,11 +262,6 @@ docker compose -f docker-compose.dev.yml up
 - [Embedding Strategies](docs/guides/embedding-strategies.md) - Semantic search configuration
 - [Schema Tags](docs/guides/schema-tags.md) - Schema annotation system
 
-### 🏗️ [Architecture](docs/architecture/)
-
-- [ADR-001: Tiered Security](docs/architecture/ADR-001-tiered-security-step-ca.md) - Step-CA integration
-- [GraphQL Gateway Analysis](docs/architecture/GRAPHQL_GATEWAY_ANALYSIS.md) - Gateway architecture
-- [GraphQL Gateway Config](docs/architecture/GRAPHQL_GATEWAY_CONFIG_EXAMPLE.md) - Configuration examples
 
 ### 🔌 [Integration](docs/integration/)
 
@@ -152,7 +280,7 @@ docker compose -f docker-compose.dev.yml up
 
 ### 📋 [Reference](docs/reference/)
 
-- [Vocabulary Specification](docs/reference/vocabulary.md) - RDF vocabularies and ontologies
+- [Algorithm Reference](docs/reference/algorithms.md) - Plain-language guide to BM25, LPA, TF-IDF, Dijkstra's
 - [Schema Versioning](docs/reference/schema-versioning.md) - Schema evolution strategy
 - [Port Allocation](docs/reference/port-allocation.md) - Service port registry
 - [Configuration Schema](docs/reference/configuration-reference.md) - Complete config reference
@@ -253,12 +381,12 @@ See [GraphRAG Guide](docs/guides/graphrag.md) and [PathRAG Guide](docs/guides/pa
 │   semstreams    │  ← Core engine (Go) - runs headless with JSON config
 └────────┬────────┘
          │
-    ┌────┴────┬──────────┬──────────┐
-    ▼         ▼          ▼          ▼
-┌────────┐ ┌─────────┐ ┌─────────┐
-│ NATS   │ │semembed │ │semsumm. │
-│JetStrm │ │(embeds) │ │ (LLM)   │
-└────────┘ └─────────┘ └─────────┘
+    ┌────┴────┬──────────┬──────────┬──────────┐
+    ▼         ▼          ▼          ▼          ▼
+┌────────┐ ┌─────────┐ ┌─────────┐ ┌────────┐
+│ NATS   │ │semembed │ │semsumm. │ │step-ca │
+│JetStrm │ │(embeds) │ │ (LLM)   │ │ (PKI)  │
+└────────┘ └─────────┘ └─────────┘ └────────┘
 
 Optional observability stack:
 ┌───────────┐ ┌─────────┐
@@ -267,7 +395,14 @@ Optional observability stack:
 └───────────┘ └─────────┘
 ```
 
-**Note**: semstreams can run headless with JSON configuration. The UI, semembed, semsummarize, Prometheus, and Grafana are optional services that can be enabled via Docker Compose profiles.
+**Note**: semstreams can run headless with JSON configuration. The UI, semembed, semsummarize, step-ca, Prometheus, and Grafana are optional services that can be enabled via Docker Compose profiles.
+
+**Optional Services**:
+
+- **semembed**: Neural embeddings (defaults to BM25 without it)
+- **semsummarize**: LLM summaries (defaults to statistical without it)
+- **step-ca**: Automated PKI with ACME for mTLS ([setup guide](docs/deployment/acme-setup.md))
+- **Prometheus + Grafana**: Metrics and visualization
 
 ### Reference Implementations
 

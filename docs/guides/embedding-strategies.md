@@ -203,6 +203,7 @@ func (m *Manager) generateEmbedding(ctx context.Context, entityID string, entity
 Text is extracted from entity properties using configured `text_fields`:
 
 **Default Fields:**
+
 ```go
 []string{"title", "content", "description", "summary", "text", "name"}
 ```
@@ -376,7 +377,203 @@ EMBEDDING_HTTP_ENDPOINT=http://semembed:8081/v1/embeddings
 EMBEDDING_HTTP_MODEL=BAAI/bge-small-en-v1.5
 ```
 
-### Type Filtering
+### Why Type Filtering Is Critical
+
+**Memory management in production deployments** requires careful type filtering. Without proper configuration, high-volume data streams can **quickly exhaust in-memory caches** and cause system instability.
+
+#### The Problem: High-Volume Telemetry
+
+**Scenario**: Real-time robotics deployment with continuous telemetry
+
+```text
+Fleet: 10 drones
+Telemetry frequency: 10 Hz per drone
+Entity types: position, velocity, battery, temperature, GPS, IMU
+```
+
+**Without type filtering:**
+
+```text
+Messages per second:  10 drones × 10 Hz × 6 entity types = 600 entities/sec
+Messages per hour:    600 × 3,600 = 2,160,000 entities
+Memory per entity:    ~2KB (vector + metadata)
+
+Total memory (1 hour):  2,160,000 × 2KB = 4.3GB
+Total memory (24 hours): 4.3GB × 24 = 103GB ⚠️
+```
+
+**Result**: Cache exhaustion, OOM kills, system failure
+
+**With proper type filtering:**
+
+```json
+{
+  "skip_types": [
+    "robotics.telemetry.*",    // Skip high-frequency telemetry
+    "sensors.raw.*",           // Skip raw sensor readings
+    "position.*.*",            // Skip position updates
+    "velocity.*.*"             // Skip velocity data
+  ],
+  "enabled_types": [
+    "alerts.*.*",              // Keep alerts
+    "events.mission.*",        // Keep mission events
+    "notes.*.*",               // Keep operator notes
+    "anomaly.*.*"              // Keep anomaly detections
+  ]
+}
+```
+
+**Result**: Only semantically meaningful entities cached
+
+```text
+Meaningful events: ~10-100 per hour
+Memory (24 hours):  2,400 entities × 2KB = 4.8MB ✅
+```
+
+#### Memory Growth Patterns
+
+**Common high-volume entity types to filter:**
+
+| Entity Type | Frequency | Memory Impact (24h) | Filter? |
+|------------|-----------|---------------------|---------|
+| **robotics.telemetry.*** | 10-50 Hz | 10-100GB | ✅ Always skip |
+| **sensors.raw.*** | 5-20 Hz | 5-50GB | ✅ Always skip |
+| **position.*** | 1-10 Hz | 1-10GB | ✅ Usually skip |
+| **metrics.*** | 1 Hz | 1-5GB | ✅ Usually skip |
+| **alerts.*** | 0.01 Hz | 1-10MB | ❌ Keep for search |
+| **events.*** | 0.1 Hz | 10-100MB | ❌ Keep for search |
+| **notes.*** | 0.001 Hz | <1MB | ❌ Keep for search |
+
+#### When Type Filtering Fails
+
+**Symptoms of improper filtering:**
+
+1. **Rapid memory growth**: Container memory steadily increases
+2. **OOM kills**: Process terminated by kernel
+3. **Slow queries**: Scanning millions of cached vectors
+4. **Cache churn**: Frequent evictions, poor hit rates
+
+**Monitoring:**
+
+```prometheus
+# Watch active embeddings count
+indexengine_embeddings_active{component="indexengine"}
+
+# Alert if growing too fast
+rate(indexengine_embeddings_active[5m]) > 1000  # More than 1000/sec
+```
+
+#### Best Practices for IoT/Robotics
+
+**1. Default to skip high-frequency types:**
+
+```json
+{
+  "skip_types": [
+    "telemetry.*.*",
+    "sensors.*.*",
+    "position.*.*",
+    "velocity.*.*",
+    "metrics.*.*"
+  ]
+}
+```
+
+**2. Explicitly enable semantic types:**
+
+```json
+{
+  "enabled_types": [
+    "alerts.*.*",           // Operator alerts
+    "events.mission.*",     // Mission lifecycle
+    "events.anomaly.*",     // Anomaly detection
+    "notes.*.*",            // Human annotations
+    "waypoints.*.*"         // Mission waypoints
+  ]
+}
+```
+
+**3. Consider aggregation for telemetry:**
+
+Instead of embedding every telemetry message, create **summary entities** at lower frequency:
+
+```text
+❌ BAD:  Embed every position update (10 Hz)
+✅ GOOD: Embed mission summaries (0.01 Hz)
+        "Mission 123: Flew 5km, battery used 40%, 2 waypoints completed"
+```
+
+**4. Monitor and adjust:**
+
+```bash
+# Check memory usage
+docker stats semstreams
+
+# Check active embeddings
+curl localhost:9090/metrics | grep embeddings_active
+
+# Adjust filters based on actual patterns
+```
+
+#### Configuration Examples
+
+**Robotics deployment (conservative):**
+
+```json
+{
+  "embedding": {
+    "enabled": true,
+    "provider": "bm25",
+    "retention_window": "12h",  // Shorter retention for memory
+    "skip_types": [
+      "robotics.telemetry.*",
+      "sensors.*.*",
+      "position.*.*",
+      "velocity.*.*",
+      "imu.*.*",
+      "gps.raw.*"
+    ],
+    "enabled_types": [
+      "alerts.*.*",
+      "events.mission.*",
+      "events.anomaly.*",
+      "notes.*.*"
+    ]
+  }
+}
+```
+
+**IoT deployment (sensor-heavy):**
+
+```json
+{
+  "embedding": {
+    "enabled": true,
+    "provider": "bm25",
+    "retention_window": "6h",   // Very short for edge devices
+    "skip_types": [
+      "sensors.*.*",
+      "metrics.*.*",
+      "telemetry.*.*"
+    ],
+    "enabled_types": [
+      "alerts.critical.*",       // Only critical alerts
+      "events.alarm.*",          // Alarm events
+      "device.status.*"          // Device status changes
+    ]
+  }
+}
+```
+
+### Type Filtering Configuration
+
+**Filter syntax:**
+
+- `enabled_types`: Allow list of message types to embed (supports wildcards)
+- `skip_types`: Deny list of message types to skip (evaluated first)
+- Format: `"domain.category.version"` (e.g., `"alerts.critical.v1"`)
+
+**Example configuration:**
 
 ```json
 {
@@ -602,9 +799,38 @@ curl -X POST /entity/doc-graphprocessor/path \
 
 ## Related Documentation
 
-- [PathRAG](features/PATHRAG.md) - Graph traversal for contextual retrieval
-- [semembed Service](../../semembed/README.md) - HTTP embedding service
-- [BM25 Embedder](../processor/graph/indexmanager/embedding/bm25_embedder.go) - Pure Go implementation
-- [HTTP Embedder](../processor/graph/indexmanager/embedding/http_embedder.go) - HTTP client
-- [Semantic Search](../processor/graph/indexmanager/semantic.go) - Search implementation
-- [Graph Query Library](../graph/query/README.md) - PathRAG implementation
+**Query Strategy Guides**:
+
+- [PathRAG Guide](pathrag.md) - Graph traversal for contextual retrieval
+- [GraphRAG Guide](graphrag.md) - Semantic similarity search with community detection
+- [Choosing Your Query Strategy](choosing-query-strategy.md) - Decision tree for query approaches
+- [Hybrid Query Patterns](hybrid-queries.md) - Combining PathRAG + GraphRAG
+
+**System Guides**:
+
+- [Message System](message-system.md) - How data flows through SemStreams
+- [Vocabulary System](vocabulary-system.md) - Semantic predicates and graph language
+- [Federation Guide](federation.md) - Distributed deployments
+
+**Integration**:
+
+- [GraphQL API](../integration/graphql-api.md) - GraphQL endpoint contracts
+- [REST API](../integration/rest-api.md) - OpenAPI specifications
+- [NATS Events](../integration/nats-events.md) - Event schemas and messaging
+
+**Architecture**:
+
+- [Architecture Overview](../getting-started/architecture.md) - High-level system design
+
+---
+
+**Implementation**: See [semstreams](https://github.com/c360/semstreams) repository
+
+- BM25 Embedder: `processor/graph/indexmanager/embedding/bm25_embedder.go`
+- HTTP Embedder: `processor/graph/indexmanager/embedding/http_embedder.go`
+- Semantic Search: `processor/graph/indexmanager/semantic.go`
+- Index Manager: `processor/graph/indexmanager/manager.go`
+
+**Embedding Services**:
+
+- [semembed](https://github.com/c360/semembed) - HTTP embedding service (Rust + fastembed)

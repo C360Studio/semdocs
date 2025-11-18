@@ -1,11 +1,5 @@
 # PathRAG: Graph Traversal for Contextual Retrieval
 
-**Status**: Production-ready (since v0.6.0)
-**Package**: `graph/query`
-**HTTP Endpoint**: `POST /entity/:id/path`
-
----
-
 ## Not Sure If This Is the Right Tool?
 
 **PathRAG is for tracing RELATIONSHIPS** (dependencies, connections, impact chains).
@@ -27,7 +21,7 @@ PathRAG (Path-based Retrieval-Augmented Generation) extends traditional semantic
 
 ## SemStreams Implementation
 
-SemStreams implements PathRAG through the `PathQuery` API with production-grade resource protection:
+SemStreams implements PathRAG through the `PathQuery` API with resource protection:
 
 ```go
 type PathQuery struct {
@@ -50,7 +44,7 @@ type PathResult struct {
 
 ### Design Philosophy
 
-**Bounded Exploration**: Unlike academic GraphRAG implementations that assume unlimited resources, SemStreams PathRAG is designed for edge deployment:
+**Bounded Exploration**: SemStreams PathRAG is designed for edge deployment:
 
 1. **MaxDepth**: Prevents infinite loops in cyclic graphs
 2. **MaxNodes**: Bounds memory usage regardless of graph density
@@ -90,6 +84,7 @@ type PathResult struct {
 ```
 
 **Result**: Discovers:
+
 - `api-service` (depth 1, score 0.9)
 - `auth-service` (depth 1, score 0.9)
 - `dashboard-frontend` (depth 2, score 0.81)
@@ -110,6 +105,7 @@ type PathResult struct {
 ```
 
 **Result**: Discovers:
+
 - Direct: Drones within radio range (depth 1)
 - Relay: Drones reachable via mesh network (depth 2-3)
 - Scores: Higher for closer/fewer hops
@@ -129,6 +125,7 @@ type PathResult struct {
 ```
 
 **Result**: Discovers:
+
 - Immediately affected services (depth 1)
 - Secondary failures (depth 2)
 - User impact chains (depth 3-4)
@@ -149,6 +146,7 @@ type PathResult struct {
 ```
 
 **Result**: Discovers:
+
 - API documentation (depth 1)
 - Usage examples (depth 2)
 - Related concepts (depth 2-3)
@@ -161,6 +159,7 @@ type PathResult struct {
 **Solution**: Hard limit on hop count
 
 **Tuning**:
+
 - **Depth 2-3**: Local neighborhood exploration
 - **Depth 4-5**: Medium-range dependency chains
 - **Depth 6+**: Rarely needed; consider graph redesign
@@ -171,6 +170,7 @@ type PathResult struct {
 **Solution**: Cap total nodes visited regardless of depth
 
 **Tuning**:
+
 - **50-100 nodes**: Quick queries, tight memory budget
 - **200-500 nodes**: Thorough exploration
 - **1000+ nodes**: Heavy queries; ensure adequate resources
@@ -181,6 +181,7 @@ type PathResult struct {
 **Solution**: Timeout ensures predictable latency
 
 **Tuning**:
+
 - **50-100ms**: Real-time user-facing queries
 - **500ms-1s**: Background analysis
 - **5s+**: Batch jobs only
@@ -191,6 +192,7 @@ type PathResult struct {
 **Solution**: Track only top-K paths by relevance
 
 **Example**: Graph with 10 entities, depth 5:
+
 - Without limit: Potentially 10^5 = 100,000 paths
 - With MaxPaths=20: Track 20 highest-scoring paths
 
@@ -202,6 +204,7 @@ type PathResult struct {
 **Formula**: `score = initial_score × (DecayFactor ^ depth)`
 
 **Tuning**:
+
 - **0.9**: Gentle decay (depth 5 → 59% relevance)
 - **0.8**: Moderate decay (depth 5 → 33% relevance)
 - **0.7**: Aggressive decay (depth 5 → 17% relevance)
@@ -222,6 +225,7 @@ type PathResult struct {
 | 10000 entities | 3 | 150 | 50ms | 120ms | 200ms |
 
 **Run benchmarks**:
+
 ```bash
 # Run all PathRAG benchmarks
 go test -bench=BenchmarkPathQuery -benchmem -benchtime=10s ./graph/query/
@@ -237,6 +241,7 @@ benchstat baseline.txt optimized.txt
 ```
 
 **Actual performance depends on**:
+
 - Entity size (properties, triple count)
 - NATS KV latency
 - Cache hit rates
@@ -246,11 +251,13 @@ benchstat baseline.txt optimized.txt
 ### Memory Usage
 
 **Per-Query Overhead**:
+
 - Entity cache: ~2KB per entity visited
 - Path tracking: ~100 bytes per path
 - Score map: ~50 bytes per entity
 
 **Example**: 100 entities, 20 paths
+
 - Memory: (100 × 2KB) + (20 × 100B) + (100 × 50B) ≈ 207KB
 
 ### Scalability Patterns
@@ -326,6 +333,7 @@ query := PathQuery{
 **Workflow**:
 
 1. **Semantic Search**: Find initial relevant entities
+
    ```json
    POST /search/semantic
    {
@@ -336,6 +344,7 @@ query := PathQuery{
    ```
 
 2. **Path Expansion**: Explore from top result
+
    ```json
    POST /entity/drone-001/path
    {
@@ -345,7 +354,8 @@ query := PathQuery{
    ```
 
 3. **Result Fusion**: Combine semantic scores + path scores
-   ```
+
+   ```text
    Final Score = (semantic_score × 0.6) + (path_score × 0.4)
    ```
 
@@ -515,12 +525,14 @@ client, _ := query.NewClient(natsClient, config)
 ### Query Returns Empty Results
 
 **Possible Causes**:
+
 1. StartEntity has no outgoing edges
 2. EdgeFilter too restrictive
 3. MaxDepth too small
 4. MaxNodes too small (truncated before finding results)
 
 **Debug**:
+
 ```go
 // Remove filters temporarily
 query.EdgeFilter = nil
@@ -534,11 +546,13 @@ log.Info("Debug traversal", "entities_found", len(result.Entities))
 ### Query Times Out
 
 **Possible Causes**:
+
 1. Graph too dense (exponential explosion)
 2. MaxTime too aggressive
 3. Slow NATS KV responses
 
 **Solutions**:
+
 - Reduce MaxDepth (each hop multiplies work)
 - Add EdgeFilter to prune exploration
 - Increase MaxTime or reduce MaxNodes
@@ -549,6 +563,7 @@ log.Info("Debug traversal", "entities_found", len(result.Entities))
 **Meaning**: Query hit MaxNodes, MaxTime, or MaxPaths limit before completing
 
 **Solutions**:
+
 1. Increase the limiting factor (check which triggered)
 2. Use tighter EdgeFilter to focus search
 3. Reduce MaxDepth if deep traversal not needed
@@ -559,6 +574,7 @@ log.Info("Debug traversal", "entities_found", len(result.Entities))
 **Cause**: Large MaxNodes or dense graphs
 
 **Solutions**:
+
 - Reduce MaxNodes to bound memory
 - Use MaxTime as primary limit (frees memory on timeout)
 - Clear query client cache periodically
@@ -567,24 +583,48 @@ log.Info("Debug traversal", "entities_found", len(result.Entities))
 ## Future Enhancements
 
 **With Community Detection** (Tier 3):
+
 - Global PathRAG: Start from community representatives
 - Multi-source PathRAG: Parallel traversal from multiple entities
 - Community-bounded PathRAG: Limit exploration to community boundaries
 
 **With Rank Fusion** (Tier 2):
+
 - Hybrid scoring: Semantic + Path + BM25
 - Multi-strategy queries: Try semantic first, expand with path on low recall
 
 ## Related Documentation
 
-- [Graph Query Library](../../graph/query/README.md) - API documentation
-- [Semantic Search](../EMBEDDING_ARCHITECTURE.md) - Vector similarity search
-- [HTTP Gateway Usage](../../configs/HTTP_GATEWAY_USAGE.md) - REST API examples
-- [GraphRAG Lessons Learned](../architecture/GRAPHRAG_LESSONS_LEARNED.md) - Research comparison
+**Query Strategy Guides**:
+
+- [Choosing Your Query Strategy](choosing-query-strategy.md) - Decision tree for PathRAG vs GraphRAG
+- [GraphRAG Guide](graphrag.md) - Semantic similarity search with community detection
+- [Hybrid Query Patterns](hybrid-queries.md) - Combining PathRAG + GraphRAG
+
+**System Guides**:
+
+- [Message System](message-system.md) - How data flows through SemStreams
+- [Vocabulary System](vocabulary-system.md) - Semantic predicates and graph language
+- [Embedding Strategies](embedding-strategies.md) - Semantic search configuration
+
+**Integration**:
+
+- [GraphQL API](../integration/graphql-api.md) - GraphQL endpoint contracts
+- [REST API](../integration/rest-api.md) - OpenAPI specifications
+- [NATS Events](../integration/nats-events.md) - Event schemas and messaging
+
+**Architecture**:
+
+- [Architecture Overview](../getting-started/architecture.md) - High-level system design
 
 ---
 
-**Implementation**: `graph/query/client.go:ExecutePathQuery()`
-**Tests**: `graph/query/client_test.go:TestExecutePathQuery()`
-**HTTP Route**: `POST /entity/:id/path`
-**NATS Subject**: `graph.query.path`
+**Implementation**: See [semstreams](https://github.com/c360/semstreams) repository
+
+- Code: `graph/query/client.go:ExecutePathQuery()`
+- Tests: `graph/query/client_test.go:TestExecutePathQuery()`
+
+**API Endpoints**:
+
+- HTTP Route: `POST /entity/:id/path`
+- NATS Subject: `graph.query.path`
