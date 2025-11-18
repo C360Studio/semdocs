@@ -1,6 +1,10 @@
 # SemStreams Ecosystem Documentation
 
-**Real-time semantic stream processing at the edge**
+## Work In Progress
+
+**All repos in ecosystem are under heavy and active dev.**
+
+## Real-time semantic stream processing at the edge
 
 Welcome to the SemStreams ecosystem documentation. This repository serves as the single source of truth for understanding the SemStreams platform architecture, concepts, and integration patterns.
 
