@@ -41,6 +41,7 @@ Stream → Parse → Rules Engine →       Graph → PathRAG/GraphRAG
 **Scenario:** Create alert entities when battery drops below threshold
 
 **Example:**
+
 - Drone battery < 20% → Create "low battery" alert entity
 - Temperature > 80°C → Create "overheat" alert
 - Connection lost > 5 minutes → Create "offline" alert
@@ -50,6 +51,7 @@ Stream → Parse → Rules Engine →       Graph → PathRAG/GraphRAG
 **Scenario:** Track when values cross thresholds
 
 **Example:**
+
 - Altitude > 400 feet → Tag entity as "high altitude"
 - Speed < 1 m/s → Tag entity as "stationary"
 - Battery charging → Update entity status
@@ -59,6 +61,7 @@ Stream → Parse → Rules Engine →       Graph → PathRAG/GraphRAG
 **Scenario:** Detect patterns across multiple entities
 
 **Example:**
+
 - Multiple drones in same area → Create "swarm" entity
 - Repeated errors from device → Create "maintenance needed" alert
 - Geo-fence violations → Create "boundary breach" alert
@@ -68,6 +71,7 @@ Stream → Parse → Rules Engine →       Graph → PathRAG/GraphRAG
 **Scenario:** Automatically create relationships between entities
 
 **Example:**
+
 - Drone near operator → Create "nearby" relationship
 - Device in fleet → Create "member of" relationship
 - Sensor on platform → Create "mounted on" relationship
@@ -336,6 +340,7 @@ curl http://localhost:9090/metrics | grep rule_
 ```
 
 **Key Metrics:**
+
 - `rule_evaluations_total` - Total evaluations
 - `rule_matches_total` - Conditions matched
 - `rule_events_generated_total` - Events created
