@@ -399,17 +399,30 @@ X-RateLimit-Reset: 1700237400
 
 ## OpenAPI Specification
 
-Full OpenAPI 3.0 specification available at:
+SemStreams provides OpenAPI 3.0 specifications for API discovery and client generation.
+
+### Component Configuration API
+
+Component schemas and configuration endpoints:
 
 ```
-GET /api/openapi.json
-GET /api/openapi.yaml
+GET /components/types           # List available component types
+GET /components/types/{id}      # Get component schema
 ```
 
-Interactive API documentation (Swagger UI):
-```
-http://localhost:8080/api/docs
-```
+**Specification File:** `specs/openapi.v3.yaml` (in semstreams repository)
+
+This spec is generated from component schema tags and includes all component configuration schemas.
+
+### Service HTTP APIs
+
+Services that expose HTTP endpoints provide OpenAPI specs via the Service Manager's aggregation mechanism.
+
+**See:** [OpenAPI Usage Guide](./openapi-usage.md) for complete documentation on:
+- How to access and use OpenAPI specifications
+- Service Manager HTTP handler documentation
+- Component configuration schema discovery
+- Client generation from OpenAPI specs
 
 ## Client Examples
 

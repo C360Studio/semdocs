@@ -884,7 +884,9 @@ Before deploying to production:
 
 ## See Also
 
-- [Configuration Management](CONFIGURATION.md) - Config file format and environment variables
-- [Operations Runbook](OPERATIONS.md) - Day-to-day operational procedures
-- [Optional Services](../OPTIONAL_SERVICES.md) - Embedding, TLS, and observability services
-- [TLS Setup Guide](../TLS_SETUP.md) - Certificate management
+- **Quick Start**: [Production Example](../../examples/production/) - Ready-to-run Docker Compose setup
+- [Configuration Management](configuration.md) - Config file format and environment variables
+- [Operations Runbook](operations.md) - Day-to-day operational procedures
+- [Optional Services](optional-services.md) - Embedding, TLS, and observability services
+- [TLS Setup Guide](tls-setup.md) - Certificate management
+- [Federation Guide](federation-advanced.md) - Multi-location deployments with mTLS

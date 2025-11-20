@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "platform": {
+    "org": "your-org",
+    "id": "edge-device-001",
+    "type": "edge-deployment",
+    "region": "local",
+    "environment": "production"
+  },
+  "nats": {
+    "urls": ["nats://nats:4222"]
+  },
+  "services": {
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "include_go_metrics": true
+      }
+    }
+  },
+  "components": {}
+}

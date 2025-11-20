@@ -1,706 +1,393 @@
-# SemStreams Ecosystem Documentation
+# SemStreams
 
 ## Work In Progress
 
-**All repos in ecosystem are under heavy and active dev.**
-
-## Real-time semantic stream processing at the edge
-
-Welcome to the SemStreams ecosystem documentation. This repository serves as the single source of truth for understanding the SemStreams platform architecture, concepts, and integration patterns.
+All repos are under **heavy and active** development
 
 ## What is SemStreams?
 
-SemStreams is a distributed semantic stream processing platform designed for edge deployments. It combines real-time graph processing, semantic search, and knowledge extraction to enable intelligent data processing at scale.
+SemStreams is a semantic graph runtime built on event-based flows.
 
-## Is SemStreams Right for You?
+As events flow through components, the runtime automatically builds semantic knowledge graphs from your event streams.
 
-**TL;DR**: SemStreams excels when you need **structured relationships (PathRAG) OR semantic search (GraphRAG) OR both** - but you don't need both for every use case. The flexibility to use only what you need is a core feature.
+Unlike linear data flows, components can connect anywhere - multiple inputs, branching outputs, flexible routing based on your needs.
 
-### Understanding Fit: It's About Your Data
+### What does "building semantic knowledge graphs" mean?
 
-Different data types map to different capabilities. Here's how to think about it:
+As events flow through your components, SemStreams automatically:
 
-| Data Type | PathRAG (Relationships) | GraphRAG (Semantic Search) | Best Configuration |
-|-----------|------------------------|---------------------------|-------------------|
-| **Robotics telemetry** (battery: 85.2, gps: [lat,lon]) | ✅ Excellent (topology, "what's near?") | ❌ Poor (no text to search) | PathRAG only, skip embeddings |
-| **Robotics + incident logs** (telemetry + "battery degraded...") | ✅ Excellent (which drone, mission) | ✅ Excellent (find similar incidents) | Full stack (PathRAG + GraphRAG) |
-| **Software specs/docs** (dependencies + descriptions) | ✅ Excellent (dependency chains) | ✅ Excellent (semantic similarity) | Full stack (PathRAG + GraphRAG) |
-| **IoT sensor networks** (temp, humidity, device IDs) | ✅ Excellent (device topology) | ❌ Poor (numeric only) | PathRAG only, skip embeddings |
-| **DevOps service mesh** (services + dependencies) | ✅ Excellent (call graphs) | ⚠️ Maybe (if you have logs/docs) | PathRAG primary, GraphRAG optional |
-| **Time-series only** (metrics over time) | ❌ Poor fit | ❌ Poor fit | **Use InfluxDB/Prometheus instead** |
+- Tracks entities mentioned in events (drones, sensors, users, etc.)
+- Indexes relationships between entities (drone belongs_to fleet)
+- Enables queries across entity connections (find all drones in fleet X)
+- Optionally adds semantic search (find similar events by meaning)
 
-### When SemStreams Excels (Full Stack)
+**Example:**
 
-**Best fit when you have BOTH structure AND semantics:**
-
-```yaml
-# Example: Software engineering knowledge graph
-Entity: Spec "Authentication System"
-Properties:
-  - title: "OAuth2 Authentication Implementation"       # ← Text for GraphRAG
-  - description: "Implements RFC 6749 with PKCE..."     # ← Text for GraphRAG
-  - status: "active"                                     # ← Metadata
-Relationships:
-  - depends_on: ["User Management Spec"]                # ← Structure for PathRAG
-  - implemented_by: ["PR-123", "PR-456"]                # ← Structure for PathRAG
-
-Queries you can run:
-- PathRAG: "Show all specs that depend on Auth" (relationship traversal)
-- GraphRAG: "Find specs similar to OAuth2" (semantic similarity)
-- Hybrid: "Find auth-related specs and their dependencies"
+```json
+Event: {"drone_id": "UAV-001", "fleet": "rescue", "battery": 15}
 ```
 
-**Use cases:**
-- Knowledge management (docs with dependencies)
-- Software architecture (specs, PRs, issues with relationships)
-- Research systems (papers with citations + semantic search)
-- Operational intelligence (incidents + infrastructure topology)
+**Graph automatically indexes:**
 
-### When to Use PathRAG Only (Skip GraphRAG)
+- Entity: UAV-001 (type: drone)
+- Relationship: UAV-001 belongs_to rescue (type: fleet)
+- Attribute: battery=15 (enables "find all low battery drones")
 
-**Best fit when you have structured relationships but minimal text:**
+**Query later:**
 
-```yaml
-# Example: IoT device fleet
-Entity: Drone "drone-001"
-Properties:
-  - battery: 85.2              # ← Numeric, not searchable text
-  - location: [37.7749, -122.4194]
-  - status: "active"
-Relationships:
-  - near: ["drone-002", "drone-003"]          # ← Structure for PathRAG
-  - reports_to: ["base-station-west"]         # ← Structure for PathRAG
+- "Show me all drones in rescue fleet with battery < 20%"
+- "Find events similar to this emergency pattern" (semantic search)
 
-Queries you can run:
-- PathRAG: "Show all drones near drone-001" (spatial relationships)
-- PathRAG: "Find fleet topology for base-station-west" (hierarchy)
-- GraphRAG: ❌ Not useful (no semantic content)
-
-Configuration: Skip semantic_enrichment processor, no embeddings
-Memory savings: ~2KB → ~200 bytes per entity (10x reduction)
-```
-
-**Use cases:**
-- IoT sensor networks (device topology, no rich descriptions)
-- Robotics telemetry (fleet coordination, spatial relationships)
-- Service mesh (microservices dependencies, no semantic search)
-- Network topology (routers, switches, connections)
-
-**Configuration tip:**
-```yaml
-processors:
-  - type: entity_extractor
-  - type: relationship_builder
-  # SKIP: semantic_enrichment (no embeddings needed)
-
-storage:
-  - type: nats_kv
-    config:
-      enable_graph_index: true      # PathRAG ✅
-      enable_semantic_index: false  # GraphRAG ❌ (save memory)
-```
-
-### When to Use GraphRAG Only (Skip PathRAG)
-
-**Best fit when you have rich text but minimal explicit relationships:**
-
-```yaml
-# Example: Document search system
-Entity: Doc "incident-report-2024-03-15"
-Properties:
-  - title: "Database Connection Pool Exhaustion"
-  - content: "At 3:47 AM PST, we observed..."    # ← Rich text for GraphRAG
-  - tags: ["database", "production", "p1"]
-Relationships:
-  # Minimal or no explicit edges between docs
-
-Queries you can run:
-- GraphRAG: "Find incidents similar to connection pool issues"
-- GraphRAG: "Summarize all database-related incidents"
-- PathRAG: ❌ Limited (no relationship structure to traverse)
-
-Configuration: Skip relationship_builder, focus on embeddings
-```
-
-**Use cases:**
-- Document search (rich text, minimal relationships)
-- Log analysis (semantic patterns in unstructured logs)
-- Content recommendation (similarity-based)
-
-### When SemStreams Is NOT the Right Fit
-
-**Be honest with yourself - sometimes alternatives are better:**
-
-| Your Need | Better Alternative | Why |
-|-----------|-------------------|-----|
-| **Pure time-series metrics** (CPU, memory over time) | InfluxDB, Prometheus, TimescaleDB | Optimized for time-based aggregation, downsampling |
-| **Pure full-text search** (search engine) | Elasticsearch, Meilisearch | Mature ranking, highlighting, faceting |
-| **Traditional OLAP** (sum, group, aggregate) | ClickHouse, Druid | Columnar storage, SQL analytics |
-| **Simple key-value lookups** (cache, session store) | Redis, Memcached | Faster, simpler for basic get/set |
-| **Batch ETL pipelines** (nightly data warehouse loads) | Airflow + dbt + Snowflake | Purpose-built for batch workflows |
-
-**Anti-patterns (common mistakes):**
-
-1. **Embedding everything** in high-volume telemetry
-   - ❌ Problem: 10 drones × 10 Hz = 600 embeddings/sec → 103GB in 24 hours
-   - ✅ Solution: Use PathRAG only, skip semantic_enrichment
-
-2. **Using it as a general database**
-   - ❌ Problem: No SQL, no transactions, no joins
-   - ✅ Solution: Use PostgreSQL for transactional data, SemStreams for graph queries
-
-3. **Trying semantic search on numeric-only data**
-   - ❌ Problem: "battery: 85.2" has no semantic meaning
-   - ✅ Solution: Skip GraphRAG, use PathRAG for relationships
-
-4. **Not filtering by entity type**
-   - ❌ Problem: Embedding noise data (heartbeats, health checks)
-   - ✅ Solution: Configure type filters (see [Embedding Strategies](docs/guides/embedding-strategies.md))
-
-### The Killer Feature: Use What You Need
-
-**SemStreams is composable** - you're not locked into using every capability:
-
-```yaml
-# Configuration A: PathRAG only (IoT fleet)
-processors:
-  - type: entity_extractor
-  - type: relationship_builder
-
-# Configuration B: GraphRAG only (document search)
-processors:
-  - type: entity_extractor
-  - type: semantic_enrichment
-
-# Configuration C: Full stack (software knowledge graph)
-processors:
-  - type: entity_extractor
-  - type: relationship_builder
-  - type: semantic_enrichment
-
-# Configuration D: Just stream processing (no graph)
-processors:
-  - type: json_parser
-  - type: custom_validator
-outputs:
-  - type: nats_publisher  # No graph storage
-```
-
-**Pick your configuration based on your data characteristics, not the framework's capabilities.**
-
-### Decision Tree
-
-```text
-Do you have structured relationships (dependencies, topology, hierarchy)?
-│
-├─ YES + Rich text descriptions (specs, docs, incidents)
-│  └─ ✅ Full Stack (PathRAG + GraphRAG)
-│
-├─ YES + Minimal text (sensor IDs, numeric telemetry)
-│  └─ ✅ PathRAG Only (skip embeddings, save memory)
-│
-├─ NO + Rich text (documents, logs, articles)
-│  └─ ✅ GraphRAG Only (semantic search)
-│
-└─ NO + Minimal text (pure metrics, time-series)
-   └─ ❌ Consider InfluxDB/Prometheus instead
-```
-
-**Still unsure?** Start with PathRAG only (lowest overhead), add GraphRAG later if you need semantic search. Schema evolution is built in - you can change your mind.
-
-**Core Capabilities:**
-
-### Real-Time Stream Processing
-
-**Flow-based architecture with first-class component types:**
-
-- **Inputs**: Ingest from any source (UDP, TCP, HTTP, WebSocket, File, NATS, custom)
-- **Processors**: Transform, enrich, extract, validate data at any point in the flow
-- **Outputs**: Send results anywhere (NATS, HTTP, files, databases, custom sinks)
-- **Storage**: Persist entities and graphs (NATS KV, custom backends)
-- **Gateways**: Expose query interfaces (GraphQL, REST, NATS subjects)
-
-**Build custom flows by composing components:**
-
-```yaml
-# Example: Multi-stage processing with branching
-inputs:
-  - type: udp_listener
-    port: 9001
-
-processors:
-  - type: json_parser
-  - type: entity_extractor
-  - type: relationship_builder
-  - type: semantic_enrichment  # Optional: hook in embeddings
-  - type: custom_validator     # Hook in your own logic
-
-outputs:
-  - type: nats_publisher
-  - type: http_webhook        # Send to multiple destinations
-
-storage:
-  - type: nats_kv             # Entity graph storage
-
-gateways:
-  - type: graphql             # Query interface
-  - type: rest_api            # Alternative query interface
-```
-
-**Hook in at any point**: Add processors, outputs, or custom logic anywhere in the flow to build exactly the processing flow you need.
-
-### How Data Flows: The Message System
-
-**All data in SemStreams flows as structured messages** - not raw bytes or untyped JSON, but typed, validated containers with behavioral capabilities.
-
-**Message Structure:**
-
-```go
-type Message interface {
-    ID() string            // Unique identifier (UUID)
-    Type() Type           // Schema (domain.category.version)
-    Payload() Payload     // Your data + optional behaviors
-    Meta() Meta          // Timestamps, source, federation info
-    Hash() string        // Content-based deduplication
-    Validate() error     // Validation at message + payload level
-}
-```
-
-**Type System** enables routing and schema evolution:
-
-```go
-Type{
-    Domain:   "sensors",      // Data domain
-    Category: "temperature",  // Message category
-    Version:  "v1",          // Schema version
-}
-// Results in NATS subject: "sensors.temperature.v1"
-```
-
-**Behavioral Interfaces** - Messages discover capabilities at runtime:
-
-- **Graphable**: Entities for knowledge graph storage (`EntityID()`, `Triples()`)
-- **Locatable**: Geographic coordinates for spatial indexing (`Location()`)
-- **Timeable**: Event timestamps for time-series (`Timestamp()`)
-- **Observable**: Sensor readings (`ObservedEntity()`, `ObservedValue()`)
-- **Correlatable**: Distributed tracing (`CorrelationID()`, `TraceID()`)
-- **Processable**: Priority and deadlines (`Priority()`, `Deadline()`)
-
-**Runtime capability discovery:**
-
-```go
-// Components discover what messages can do
-if graphable, ok := msg.Payload().(Graphable); ok {
-    entityID := graphable.EntityID()
-    triples := graphable.Triples()
-    // Store in knowledge graph
-}
-
-if locatable, ok := msg.Payload().(Locatable); ok {
-    lat, lon := locatable.Location()
-    // Build spatial index
-}
-```
-
-**Why this matters:**
-
-- ✅ **Type-safe** - Compile-time safety with runtime flexibility
-- ✅ **Extensible** - Add new behaviors without breaking existing code
-- ✅ **Routable** - Message types map directly to NATS subjects
-- ✅ **Discoverable** - Components learn what messages can do at runtime
-- ✅ **Validated** - Messages validate themselves before processing
-
-See [Message System Guide](docs/guides/message-system.md) for details on creating custom payloads and using behavioral interfaces.
-
-### Dynamic Knowledge Graphs: Stream to Graph
-
-**SemStreams automatically builds and maintains knowledge graphs from streaming data** - no batch ETL, no manual modeling, just real-time semantic graphs.
-
-**How it works**:
-
-```text
-Incoming Stream        Entity Extraction       Knowledge Graph
-──────────────────    ─────────────────────    ───────────────────
-UDP packets      →    Graphable interface  →   Entity nodes
-JSON events      →    EntityID() method    →   + Properties
-WebSocket data   →    Triples() method     →   + Relationships
-NATS messages    →    Auto-storage         →   + Temporal metadata
-
-Result: Queryable semantic graph updated in real-time
-```
-
-**Key Characteristics**:
-
-1. **Dynamic** - Graphs update as data streams in (not batch processed)
-2. **Semantic** - Entities and relationships have meaning (via vocabulary)
-3. **Temporal** - Full history tracked (every update timestamped)
-4. **Queryable** - PathRAG for relationships, GraphRAG for semantic search
-5. **Federated** - Sync graphs across edge/cloud instances
-
-#### Example: IoT Sensor Graph
-
-```go
-// Incoming message (UDP packet from drone)
-msg := &DroneStatusMessage{
-    DroneID: "drone-001",
-    Battery: 85.5,
-    Location: LatLon{37.7749, -122.4194},
-}
-
-// Message implements Graphable → automatic graph construction
-triples := msg.Triples()
-// Returns:
-// [
-//   {Subject: "drone-001", Predicate: "robotics.battery.level", Object: 85.5},
-//   {Subject: "drone-001", Predicate: "geo.location.latitude", Object: 37.7749},
-//   {Subject: "drone-001", Predicate: "graph.rel.near", Object: "drone-002"},
-// ]
-
-// Stored in NATS KV → queryable via PathRAG/GraphRAG immediately
-```
-
-**From Stream to Graph in < 5ms**:
-
-1. Message arrives (UDP/TCP/WebSocket/NATS)
-2. `Graphable` interface extracts entities + relationships
-3. Triples persisted to NATS KV
-4. Graph indexes updated (PathRAG + GraphRAG)
-5. Ready for query
-
-**What you get**:
-
-- **Entity graph** - Nodes (drones, sensors, specs) with typed properties
-- **Relationship graph** - Edges (depends_on, near, implements) between entities
-- **Semantic index** - BM25/neural embeddings for similarity search
-- **Community structure** - LPA clustering for GraphRAG global search
-- **Temporal views** - Query graph state at any point in time
-
-**Why "dynamic" matters**:
-
-Traditional knowledge graphs require batch ETL pipelines that run hourly/daily. **SemStreams graphs update in real-time** as events happen - query the current state of your world, not yesterday's snapshot.
-
-**Use cases**:
-
-- **IoT**: Real-time device topology and status
-- **Robotics**: Mission planning with live fleet status
-- **DevOps**: Live service dependency graphs
-- **Knowledge management**: Continuously updated documentation graphs
-
-See [PathRAG Guide](docs/guides/pathrag.md) and [GraphRAG Guide](docs/guides/graphrag.md) for querying your dynamic knowledge graph.
-
-### Semantic Vocabulary: The Knowledge Graph Language
-
-**Predicates define properties and relationships** in the knowledge graph using clean dotted notation.
-
-**Pragmatic Semantic Web Approach:**
-
-- **Internal**: Dotted notation everywhere (`domain.category.property`)
-- **External**: Optional IRI mappings for standards compliance
-- **No Leakage**: Standards complexity stays at API boundaries
-
-**Predicate Structure:**
-
-```go
-"sensor.temperature.celsius"   // domain.category.property
-"geo.location.latitude"        // Clean, human-readable
-"graph.rel.depends_on"         // Relationship predicate
-```
-
-**NATS-Friendly Wildcards:**
-
-```go
-// Query all temperature predicates
-nc.Subscribe("sensor.temperature.*", handler)
-
-// Query entire sensor domain
-nc.Subscribe("sensor.>", handler)
-```
-
-**Standard Vocabulary Support** - Optional IRI mappings for RDF/OGC export:
-
-- **OWL**: `owl:sameAs`, `owl:equivalentClass`
-- **SKOS**: `skos:prefLabel`, `skos:altLabel`
-- **Dublin Core**: `dc:identifier`, `dc:references`
-- **Schema.org**: `schema:name`, `schema:sameAs`
-- **SSN/SOSA**: Sensor ontology for IoT/robotics
-
-**Define custom vocabularies:**
-
-```go
-const BatteryLevel = "robotics.battery.level"
-
-func init() {
-    vocabulary.Register(BatteryLevel,
-        vocabulary.WithDescription("Battery charge percentage"),
-        vocabulary.WithDataType("float64"),
-        vocabulary.WithUnits("percent"),
-        vocabulary.WithRange("0-100"),
-        vocabulary.WithIRI("http://schema.org/batteryLevel"))  // Optional
-}
-```
-
-**Use in triples:**
-
-```go
-triple := message.Triple{
-    Subject:   droneID,
-    Predicate: BatteryLevel,  // Dotted notation
-    Object:    85.5,
-}
-// Internal: "robotics.battery.level"
-// RDF export: "http://schema.org/batteryLevel" (if mapped)
-```
-
-See [Vocabulary System Guide](docs/guides/vocabulary-system.md) for predicate registration, alias types, and standards mappings.
-
-### Graph Query & Search
-
-- **PathRAG**: Fast graph traversal for tracing dependencies, impact chains, and spatial relationships ([guide](docs/guides/pathrag.md))
-- **GraphRAG**: Semantic search using hierarchical community detection with local/global modes ([guide](docs/guides/graphrag.md))
-- **Hybrid Queries**: Combine structural + semantic approaches for comprehensive results ([patterns](docs/guides/hybrid-queries.md))
-- **Not sure which to use?** See [Choosing Your Query Strategy](docs/guides/choosing-query-strategy.md)
-
-### Progressive Enhancement Philosophy
-
-**Works offline with zero dependencies, gets better with optional services:**
-
-- **Embeddings**: BM25 (pure Go, always works) → HTTP neural embeddings (optional enhancement)
-- **Summaries**: Statistical TF-IDF (always works) → Async LLM enrichment (optional enhancement)
-- **Storage**: Local NATS KV (always works) → Distributed federation (optional enhancement)
-
-This means SemStreams runs in constrained environments while gracefully scaling up when resources are available.
-
-### Distributed & Edge-Ready
-
-- **Federation**: Multi-instance graph synchronization
-- **Edge Deployment**: Minimal resource footprint, offline capable
-- **Cloud Scale**: Optional neural embeddings, LLM services, distributed storage
-
-## Ecosystem Components
-
-| Service | Purpose | Repository |
-|---------|---------|------------|
-| **semstreams** | Core stream processing engine | [semstreams](https://github.com/c360/semstreams) |
-| **semstreams-ui** | Web-based UI for flow building and monitoring | [semstreams-ui](https://github.com/c360/semstreams-ui) |
-| **semembed** | Embedding service (Rust + fastembed) | [semembed](https://github.com/c360/semembed) |
-| **semsummarize** | Summarization service (Rust + Candle) | [semsummarize](https://github.com/c360/semsummarize) |
-| **semmem** | Memory infrastructure for agentic coding (reference implementation using github spec-kit) | [semmem](https://github.com/c360/semmem) |
-| **semops** | Semantic common operational picture (reference implementation) | [semops](https://github.com/c360/semops) |
-
-## Quick Start
-
-```bash
-# Clone the ecosystem
-git clone https://github.com/c360/semstreams
-git clone https://github.com/c360/semstreams-ui
-git clone https://github.com/c360/semembed
-
-# Start core services with Docker Compose
-cd semstreams
-docker compose -f docker-compose.dev.yml up
-```
-
-**Next Steps:**
-
-- [Getting Started Guide](docs/getting-started/quickstart.md) - 5-minute quickstart
-- [Architecture Overview](docs/getting-started/architecture.md) - High-level system design
-- [Core Concepts](docs/getting-started/concepts.md) - Semantic streaming fundamentals
-
-## Documentation Structure
-
-### 📚 [Getting Started](docs/getting-started/)
-
-- [Quickstart Guide](docs/getting-started/quickstart.md) - Get up and running in 5 minutes
-- [Architecture Overview](docs/getting-started/architecture.md) - System architecture and design
-- [Core Concepts](docs/getting-started/concepts.md) - Semantic streaming fundamentals
-
-### 📖 [Guides](docs/guides/)
-
-**Core Concepts**:
-
-- [Message System Guide](docs/guides/message-system.md) - How data flows through SemStreams (typed messages, behavioral interfaces)
-- [Vocabulary System Guide](docs/guides/vocabulary-system.md) - Semantic predicates for the knowledge graph (dotted notation, IRI mappings)
-
-**Query Strategies** - Choosing the right approach:
-
-- [Choosing Your Query Strategy](docs/guides/choosing-query-strategy.md) - **START HERE** - Decision tree for PathRAG vs GraphRAG
-- [PathRAG Guide](docs/guides/pathrag.md) - Graph traversal for dependencies and relationships
-- [GraphRAG Guide](docs/guides/graphrag.md) - Hierarchical community search (local/global) for semantic similarity
-- [Hybrid Query Patterns](docs/guides/hybrid-queries.md) - Combining PathRAG + GraphRAG for maximum insight
-
-**Other Guides**:
-
-- [Federation Guide](docs/guides/federation.md) - Distributed graph processing
-- [Embedding Strategies](docs/guides/embedding-strategies.md) - Semantic search configuration
-- [Schema Tags](docs/guides/schema-tags.md) - Schema annotation system
-
-### 🔌 [Integration](docs/integration/)
-
-- [NATS Events](docs/integration/nats-events.md) - Event schemas and messaging
-- [GraphQL API](docs/integration/graphql-api.md) - GraphQL endpoint contracts
-- [REST API](docs/integration/rest-api.md) - OpenAPI specifications
-- [Service Mesh](docs/integration/service-mesh.md) - Inter-service communication
-
-### 🚀 [Deployment](docs/deployment/)
-
-- [Production Setup](docs/deployment/production.md) - Production architecture
-- [Operations Guide](docs/deployment/operations.md) - Running and maintaining
-- [Configuration Reference](docs/deployment/configuration.md) - All configuration options
-- [TLS Setup](docs/deployment/tls-setup.md) - ACME/Let's Encrypt configuration
-- [Monitoring](docs/deployment/monitoring.md) - Observability and metrics
-
-### 📋 [Reference](docs/reference/)
-
-- [Algorithm Reference](docs/reference/algorithms.md) - Plain-language guide to BM25, LPA, TF-IDF, Dijkstra's
-- [Schema Versioning](docs/reference/schema-versioning.md) - Schema evolution strategy
-- [Port Allocation](docs/reference/port-allocation.md) - Service port registry
-- [Configuration Schema](docs/reference/configuration-reference.md) - Complete config reference
-
-### 🛠️ [Development](docs/development/)
-
-- [Agent Workflow](docs/development/agents.md) - TDD workflow with specialized agents
-- [Contributing Guide](docs/development/contributing.md) - How to contribute
-- [Testing Philosophy](docs/development/testing.md) - Testing standards and patterns
-
-## Architecture Highlights
-
-### Component-Based Flow Architecture
-
-**SemStreams uses a flexible, composable component model:**
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                    INPUTS (Ingest)                           │
-│  UDP │ TCP │ HTTP │ WebSocket │ File │ NATS │ Custom        │
-└───────────────┬─────────────────────────────────────────────┘
-                │
-                ├─────────────────────────────────────┐
-                │                                     │
-┌───────────────▼────────┐              ┌─────────────▼──────┐
-│  PROCESSORS (Transform) │              │ PROCESSORS (Branch)│
-│  • Parser               │              │ • Filter           │
-│  • Entity Extractor     │              │ • Aggregator       │
-│  • Relationship Builder │              │ • Custom Logic     │
-│  • Validator            │              └─────────┬──────────┘
-│  • Enrichment           │                        │
-│  • Custom Hooks         │                        │
-└───────────┬─────────────┘                        │
-            │                                      │
-            ├──────────┬───────────────────────────┘
-            │          │
-┌───────────▼─────┐    ┌───▼────────┐
-│  STORAGE        │    │  OUTPUTS   │
-│  • NATS KV      │    │  • NATS    │
-│  • Graph Index  │    │  • HTTP    │
-│  • Communities  │    │  • File    │
-│  • Custom       │    │  • Custom  │
-└───────┬─────────┘    └────────────┘
-        │
-┌───────▼──────────────────────────────────────────────────────┐
-│                    GATEWAYS (Query)                           │
-│  GraphQL │ REST API │ NATS Subjects │ Custom Endpoints       │
-│    ↓          ↓            ↓                                  │
-│  PathRAG │ GraphRAG │ Semantic Search │ Direct Access        │
-└───────────────────────────────────────────────────────────────┘
-```
-
-**Key Design Principles:**
-
-- **Composable**: Chain, branch, and fork data flows as needed
-- **Pluggable**: Hook custom processors anywhere in the pipeline
-- **Multi-Output**: Send data to multiple destinations simultaneously
-- **Independently Deployable**: Each component can run standalone or distributed
-- **Event-Driven**: NATS-based messaging enables decoupled architecture
-- **Resource-Aware**: Configure limits per component for edge deployment
-
-**Example Flows:**
-
-- **IoT Edge**: UDP → Parser → Entity Extractor → Local NATS KV → Query via REST
-- **Data Integration**: Multiple inputs → Processor chain → Branch to both storage and webhook
-- **Distributed Processing**: Input on edge → NATS federation → Cloud storage → Query anywhere
-- **Custom Flow**: Your input → Your processors → SemStreams storage → PathRAG/GraphRAG queries
-
-### Progressive Enhancement in Practice
-
-**Unlike typical RAG/search stacks that require heavy cloud dependencies, SemStreams works offline:**
-
-| Capability | Baseline (Always Works) | Enhancement (Optional) |
-|-----------|------------------------|----------------------|
-| **Embeddings** | BM25 lexical (pure Go) | HTTP neural embeddings |
-| **Summaries** | Statistical TF-IDF | Async LLM enrichment |
-| **Storage** | Local NATS KV | Federated multi-instance |
-| **Network** | Offline operation | Distributed sync |
-| **Query** | PathRAG + BM25 GraphRAG | Neural embeddings GraphRAG |
-
-This means you can:
-
-- ✅ Develop locally without internet
-- ✅ Deploy to edge devices with minimal resources
-- ✅ Scale up to cloud with neural models when available
-- ✅ Degrade gracefully when services are unavailable
-
-See [GraphRAG Guide](docs/guides/graphrag.md) and [PathRAG Guide](docs/guides/pathrag.md) for query patterns.
-
-### Core Service Architecture
-
-```text
-┌─────────────────┐
-│  semstreams-ui  │  ← Visual flow builder + runtime dashboard (Svelte 5, optional)
-└────────┬────────┘
-         │
-┌────────▼────────┐
-│   semstreams    │  ← Core engine (Go) - runs headless with JSON config
-└────────┬────────┘
-         │
-    ┌────┴────┬──────────┬──────────┬──────────┐
-    ▼         ▼          ▼          ▼          ▼
-┌────────┐ ┌─────────┐ ┌─────────┐ ┌────────┐
-│ NATS   │ │semembed │ │semsumm. │ │step-ca │
-│JetStrm │ │(embeds) │ │ (LLM)   │ │ (PKI)  │
-└────────┘ └─────────┘ └─────────┘ └────────┘
-
-Optional observability stack:
-┌───────────┐ ┌─────────┐
-│Prometheus │ │ Grafana │
-│ (metrics) │ │  (viz)  │
-└───────────┘ └─────────┘
-```
-
-**Note**: semstreams can run headless with JSON configuration. The UI, semembed, semsummarize, step-ca, Prometheus, and Grafana are optional services that can be enabled via Docker Compose profiles.
-
-**Optional Services**:
-
-- **semembed**: Neural embeddings (defaults to BM25 without it)
-- **semsummarize**: LLM summaries (defaults to statistical without it)
-- **step-ca**: Automated PKI with ACME for mTLS ([setup guide](docs/deployment/acme-setup.md))
-- **Prometheus + Grafana**: Metrics and visualization
-
-### Reference Implementations
-
-Applications built using SemStreams:
-
-- **semmem**: Memory infrastructure for agentic coding with github spec-kit
-- **semops**: Semantic common operational picture
-
-## Getting Help
-
-- **Issues**: Report bugs or request features in the respective repository
-- **Discussions**: Join the discussion in [semstreams Discussions](https://github.com/c360/semstreams/discussions)
-- **Documentation Issues**: Report doc issues in [semdocs](https://github.com/c360/semdocs/issues)
-
-## Contributing
-
-We welcome contributions! See the [Contributing Guide](docs/development/contributing.md) for details on:
-
-- Development workflow with specialized agents (go-developer, svelte-developer, etc.)
-- TDD best practices
-- Code review process
-- Documentation standards
-
-## License
-
-[License information to be added]
+This happens in the background. You just route events - the graph builds itself.
 
 ---
 
-**Note**: This is the ecosystem documentation. For implementation details, see individual service repositories.
+## Why Semantics at the Source?
+
+**The traditional approach:** Send raw data upstream, apply structure later.
+
+```text
+Raw Events → Network → Central Processing → Add Structure → Try to Merge
+```
+
+### The problem: Semantic Misalignment
+
+When you have multiple sources—drones, sensors, logs, APIs—each creates its own understanding:
+
+- CRM calls them "customers", logs call them "users", sensors call them "operators"
+- One source uses lat/long, another uses geohash, another uses place names
+- Relationships are implicit: "Which drone belongs to which fleet?" isn't captured
+- When data arrives centrally, you can't reliably merge entities across sources
+- Building cross-source knowledge graphs becomes a post-processing nightmare
+
+**SemStreams approach:** Apply semantic structure at ingestion.
+
+```text
+Events → Semantic Processing → Aligned Entities → Cross-Source Fusion
+```
+
+### The Solution: Semantic interoperability enables fusion
+
+When each source adds semantic structure at ingestion:
+
+- **Consistent entity types**: All sources use agreed ontologies (lightweight or formal)
+- **Explicit relationships**: "drone belongs_to fleet" captured where it's created
+- **Semantic alignment**: Different sources can map to common semantics before fusion
+- **Composable graphs**: Entities from multiple sources can be linked reliably
+
+### Example: Fleet monitoring from 3 sources
+
+```shell
+Source 1 (Telemetry): UAV-001 → semantics → Entity(id=drone:uav-001, type=drone)
+Source 2 (Maintenance): "uav 001" → semantics → Entity(id=drone:uav-001, type=drone)
+Source 3 (Flight Logs): "UAV_001" → semantics → Entity(id=drone:uav-001, type=drone)
+
+→ Fusion: Single unified entity across all sources
+→ Query: "Show maintenance history + telemetry + flight logs for UAV-001"
+```
+
+Without semantics at source, you get three disconnected entities with different IDs.
+
+**Key advantages:**
+
+✅ **Semantic interoperability** - Sources speak common semantic language
+✅ **Cross-source fusion** - Build knowledge graphs spanning heterogeneous sources
+✅ **Flexible formality** - Support informal tags to formal ontologies, per-source
+✅ **Context preservation** - Relationships captured where context exists
+✅ **Composable graphs** - Entity resolution before fusion, not after
+
+**Secondary benefits:**
+
+✅ **Bandwidth efficiency** - Send structured entities, not raw streams
+✅ **Edge autonomy** - Process offline, sync semantically-aligned data when connected
+✅ **Privacy/compliance** - Semantic filtering at source keeps sensitive data local
+
+This is what we mean by "semantics at the source": applying consistent semantic structure where data is created, enabling cross-source knowledge graphs that would be impossible from post-processed raw data.
+
+---
+
+## The SemStreams Ecosystem
+
+SemStreams is the **core runtime** - the heart of the ecosystem.
+
+**Core Runtime:**
+
+- **[SemStreams](https://github.com/c360/semstreams)** - Event-based semantic graph runtime
+
+**Optional Enhancement Services:**
+
+- **[SemEmbed](https://github.com/c360/semembed)** - Transformer-based vector embeddings (OpenAI API-compatible)
+- **[SemSummarize](https://github.com/c360/semsummarize)** - LLM-powered summarization (OpenAI API-compatible)
+
+**Reference Implementations:**
+
+- **SemMem** - Memory infrastructure for agentic coding
+- **SemOps** - Common Operating Picture for field operations
+
+Use SemStreams standalone or with enhancements. Reference implementations show real-world production patterns.
+
+### Core capabilities
+
+- Component-based architecture
+- Real-time stream processing
+- Event routing and transformation via message bus
+- Automatic entity graph indexing from event streams
+- Relationship tracking (spatial, temporal, predicates)
+- Federation with selective sync
+- Optional semantic enhancements (SemEmbed, SemSummarize)
+
+---
+
+## Why Message Bus?
+
+**Traditional approaches:**
+
+- Tight coupling between processing stages
+- Linear flows - rigid, hard to extend
+- Point-to-point connections don't scale
+
+**Message bus pattern:**
+
+- Loose coupling - components don't know about each other
+- Publish/subscribe - add new consumers without changing producers
+- Non-linear flows - route events based on content, not topology
+- Independent scaling - scale busy components independently
+
+### Implementation: NATS + JetStream
+
+SemStreams uses NATS with JetStream for the message bus.
+
+**Why NATS?**
+
+- ✅ Lightweight - minimal overhead, fast message delivery
+- ✅ Built-in persistence - JetStream provides durable streams
+- ✅ Key-value storage - no external database for state
+- ✅ Geographical distribution - multi-region federation built-in
+- ✅ Developer friendly - simple ops, no Kafka/Zookeeper complexity
+
+**Don't know NATS? No problem** - SemStreams config abstracts it:
+
+- Declare subjects (topics) in component config
+- Components handle subscribe/publish automatically
+- Optional: Direct NATS access for advanced use cases
+
+---
+
+## Quick Start: Event Flow Example
+
+**Basic Event Flow:**
+
+```json
+{
+  "components": {
+    "udp_listener": {
+      "type": "input",
+      "outputs": [{"subject": "raw.telemetry"}]
+    },
+    "json_parser": {
+      "type": "processor",
+      "inputs": [{"subject": "raw.telemetry"}],
+      "outputs": [{"subject": "parsed.telemetry"}]
+    },
+    "file_writer": {
+      "type": "output",
+      "inputs": [{"subject": "parsed.telemetry"}]
+    }
+  }
+}
+```
+
+**Event Flow Diagram:**
+
+```text
+UDP Listener
+    ↓ publish
+Message Bus (NATS)
+    ↓ subscribe
+JSON Parser
+    ↓ publish
+Message Bus (NATS)
+    ├─ subscribe → File Writer
+    └─ subscribe → Graph Indexer → Semantic Search
+```
+
+**Non-Linear Flow Example:**
+
+```text
+Temperature Sensor → sensor.temp.*
+                          ↓
+                    Message Bus
+          ┌────────────┼────────────┐
+          ↓            ↓            ↓
+    Alert (>100°)  Logger (all)  Metrics (stats)
+```
+
+Shows:
+
+- Multiple subscribers on same subject
+- Content-based routing (alert only triggers on threshold)
+- Components added without changing producers
+
+---
+
+## Progressive Enhancement
+
+### Layer 1: Automatic Graph Building (CORE - Always On)
+
+✅ Events → Entity extraction
+✅ Entities → Relationship indexing
+✅ Native semantic indexing (Go algorithms, no external services)
+✅ Queries across entity connections
+
+**Disable this?** Use vanilla NATS instead and avoid overhead.
+
+### Layer 2: Enhanced Indexing (OPTIONAL)
+
+✅ Spatial indexes (location-based queries)
+✅ Temporal indexes (time-based queries)
+✅ Predicate indexes (relationship types)
+✅ Alias indexes (entity name resolution)
+
+Configure what you need, skip what you don't.
+
+### Layer 3: Semantic Enhancements (OPTIONAL)
+
+**SemEmbed** - Enhanced vector embeddings
+
+- Upgrades semantic similarity search quality
+- Resource: Embed integration (local or any OpenAI API-compatible service)
+- Native semantic still works without it
+
+**SemSummarize** - AI-powered summarization
+
+- Upgrades entity/event commuity summarization quality
+- Resource: LLM integration (local or any OpenAI API-compatible service)
+- Native summarization still works without it
+
+### Layer 4: Edge Federation (OPTIONAL)
+
+- Realtime push based
+- Selective sync
+- Backpressure supported
+
+#### Key Distinction: Native vs Enhanced
+
+| Feature | Native (Included) | Enhanced (Optional) |
+|---------|-------------------|---------------------|
+| Semantic indexing | ✅ Go algorithms | ✅ Transformer models (SemEmbed) |
+| Similarity search | ✅ Basic | ✅ Higher quality |
+| Summarization | ✅ Template-based | ✅ LLM-powered (SemSummarize) |
+| Works on | ✅ Everywhere (laptop, server, Raspberry Pi) | ⚠️ Requires sufficient compute |
+| External services | ❌ None | ✅ SemEmbed (~2GB), SemSummarize (LLM) |
+
+**Both work.** Enhanced = better quality, native = works anywhere.
+
+---
+
+## Edge-First Architecture
+
+SemStreams is designed for edge deployment, not just centralized processing.
+
+**Typical Pattern:**
+
+```text
+┌─────────────────────────────────────────┐
+│ EDGE (Drone, Vehicle, IoT Gateway)     │
+│ • Lightweight SemStreams runtime        │
+│ • Local graph building from sensors     │
+│ • Local queries (low latency)           │
+│ • Selective sync (bandwidth-aware)      │
+└──────────────┬──────────────────────────┘
+               │ Filtered events only
+               ↓
+┌─────────────────────────────────────────┐
+│ LAPTOP/SERVER (Central Processing)     │
+│ • Full SemStreams + semantic services   │
+│ • Cross-edge aggregation                │
+│ • Long-term graph storage               │
+│ • Semantic search across all edges      │
+└─────────────────────────────────────────┘
+```
+
+**Why This Matters:**
+
+✅ Process at the edge, decide what goes upstream (not everything)
+✅ Low-latency local queries (don't wait for server round-trip)
+✅ Bandwidth efficiency (send summaries, not raw streams)
+✅ Offline operation (edge continues when disconnected)
+✅ Privacy/compliance (sensitive data stays local)
+
+---
+
+## When to Use / When Not to Use
+
+### Use SemStreams when
+
+✅ Entity graphs from event streams
+✅ Relationships matter (not just individual events)
+✅ Edge deployment (process locally, sync selectively)
+✅ Temporal/Spatial tracking (entity state over time and space)
+✅ Optional: Semantic search, AI summarization
+
+### Use NATS directly when
+
+✅ Simple pub/sub event routing
+✅ No entity tracking needed
+✅ No edge requirements
+✅ You just need message delivery
+
+---
+
+## What's Next
+
+### Quick Start with Docker Compose
+
+**Fastest way to try SemStreams** - Docker Compose examples ready to run:
+
+```bash
+# Get running in 30 seconds
+cd examples/quickstart/
+docker compose up -d
+
+# Verify it's working
+curl http://localhost:8080/health
+```
+
+**Examples available:**
+
+- **[quickstart/](examples/quickstart/)** - NATS + SemStreams (minimal setup)
+- **[with-ui/](examples/with-ui/)** - Add visual flow builder
+- **[with-embeddings/](examples/with-embeddings/)** - Add semantic search
+- **[production/](examples/production/)** - Hardened edge deployment
+
+See **[Examples Overview](examples/README.md)** for full comparison and setup guides.
+
+### Documentation Structure
+
+**Learning Path** (numbered sequences):
+
+- **[Basics](docs/basics/)** (01-07) - Core concepts, components, routing, first flow, message system, rules engine, examples
+- **[Graph](docs/graph/)** (01-04) - Entities, relationships, queries, indexing
+- **[Semantic](docs/semantic/)** (01-04) - Overview, SemEmbed, SemSummarize, decision guide
+- **[Edge](docs/edge/)** (01-04) - Patterns, constraints, federation, offline
+- **[Advanced](docs/advanced/)** (01-07) - PathRAG vs GraphRAG, performance, architecture, production, algorithms, hybrid queries, query strategies
+
+**Reference Documentation** (unnumbered):
+
+- **[Deployment](docs/deployment/)** - Production, TLS, ACME, configuration, monitoring, operations, optional services, federation
+- **[Integration](docs/integration/)** - REST API, GraphQL API, NATS events, OpenAPI usage
+- **[Development](docs/development/)** - Contributing, testing, agents, writing components, schema tags
+
+**Start here:**
+
+- **New to SemStreams?** → [What is SemStreams](docs/basics/01-what-is-semstreams.md)
+- **Want to run it now?** → [Examples](examples/README.md)
+- **Building flows?** → [Your First Flow](docs/basics/04-first-flow.md)
+- **Production deployment?** → [Production Guide](docs/deployment/production.md)
+
+**Repositories:**
+[semstreams](https://github.com/c360/semstreams) (core) · [semembed](https://github.com/c360/semembed) (embeddings) · [semsummarize](https://github.com/c360/semsummarize) (LLM) · [semmem](https://github.com/c360/semmem) (agentic memory) · [semops](https://github.com/c360/semops) (field operations)
+
+---
+
+**SemStreams** - Event-based semantic graph runtime.

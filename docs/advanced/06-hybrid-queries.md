@@ -1,6 +1,10 @@
 # Hybrid Query Patterns
 
-## Combining PathRAG and GraphRAG for maximum context and relevance**
+Combining PathRAG and GraphRAG for maximum context and relevance
+
+---
+
+## Overview
 
 Hybrid queries leverage both graph structure (PathRAG) and semantic clustering (GraphRAG) to provide comprehensive, relevant results. This guide shows practical patterns for combining these strategies.
 
@@ -27,6 +31,8 @@ Hybrid queries leverage both graph structure (PathRAG) and semantic clustering (
 - PRs with similar keywords
 
 **Hybrid** finds all of the above!
+
+---
 
 ## Pattern 1: Semantic First, Then Expand
 
@@ -139,6 +145,8 @@ async function investigateIncident(alertID) {
 - **Current impact**: Affected drones and systems (structural)
 - **Root causes**: Previous incidents with similar signatures (semantic)
 - **Cascade effects**: Downstream failures (structural)
+
+---
 
 ## Pattern 2: Structural First, Then Enrich
 
@@ -290,6 +298,8 @@ async function analyzeNetworkOutage(relayID) {
 - **Historical patterns**: Similar outages from the past (semantic)
 - **Risk assessment**: Which drones are most vulnerable based on both proximity and history
 
+---
+
 ## Pattern 3: Parallel Execution, Fused Results
 
 **Strategy**: Run PathRAG and GraphRAG queries in parallel, then fuse results with weighted scoring.
@@ -432,6 +442,8 @@ function rankFusion(options) {
 }
 ```
 
+---
+
 ## Pattern 4: Iterative Refinement
 
 **Strategy**: Start broad with GraphRAG Global, then refine with PathRAG exploration.
@@ -507,6 +519,8 @@ async function exploreAuthenticationArchitecture() {
 - **Discovery**: Found auth-related entities without knowing where to start (global search)
 - **Structure**: Mapped out how they connect (path traversal)
 - **Context**: Understood what each component does (community summaries)
+
+---
 
 ## Performance Optimization
 
@@ -603,6 +617,8 @@ async function* streamingHybridQuery(entityID, query) {
   yield { type: "semantic_global", data: globalResults, partial: false };
 }
 ```
+
+---
 
 ## Best Practices
 
@@ -721,6 +737,8 @@ async function robustHybridQuery(entityID, query) {
 }
 ```
 
+---
+
 ## Summary
 
 **Hybrid queries provide the most comprehensive results** by combining:
@@ -738,12 +756,14 @@ async function robustHybridQuery(entityID, query) {
 
 **Remember**: Start simple, add complexity as needed. A single PathRAG or GraphRAG query is often sufficient - use hybrid queries when you need maximum insight.
 
+---
+
 ## Next Steps
 
-- **Understand PathRAG**: Read [PathRAG Guide](pathrag.md)
-- **Understand GraphRAG**: Read [GraphRAG Guide](graphrag.md)
-- **Choose Strategy**: See [Choosing Your Query Strategy](choosing-query-strategy.md)
-- **Configure Embeddings**: Review [Embedding Strategies](embedding-strategies.md)
+- **Understand PathRAG and GraphRAG**: Read [PathRAG vs GraphRAG Decisions](01-pathrag-graphrag-decisions.md)
+- **Choose Strategy**: See [Choosing Your Query Strategy](07-query-strategies.md)
+- **Configure Embeddings**: Review [Embedding Decision Guide](../semantic/04-decision-guide.md)
+- **Performance Tuning**: Read [Performance Tuning](02-performance-tuning.md)
 
 ---
 

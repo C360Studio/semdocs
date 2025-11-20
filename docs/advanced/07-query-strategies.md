@@ -1,6 +1,10 @@
 # Choosing Your Query Strategy
 
-## Making sense of PathRAG, GraphRAG, and when to use them together
+Making sense of PathRAG, GraphRAG, and when to use them together
+
+---
+
+## Overview
 
 SemStreams provides two powerful query strategies that solve different problems. This guide helps you choose the right tool for your use case - or combine both for even better results.
 
@@ -24,6 +28,8 @@ What are you trying to find?
 └─ "Full CONTEXT for this entity" ────────► Hybrid (PathRAG + GraphRAG)
    "Everything related AND similar"
 ```
+
+---
 
 ## What's the Difference?
 
@@ -87,6 +93,8 @@ query {
 - `docs/authentication.md` (similar keywords, same community)
 
 **Key Difference**: GraphRAG doesn't require explicit relationships - it finds entities grouped by semantic similarity.
+
+---
 
 ## When to Use Each Strategy
 
@@ -208,6 +216,8 @@ query {
 }
 ```
 
+---
+
 ## Hybrid Queries: Best of Both Worlds
 
 **The Most Powerful Approach**: Combine PathRAG and GraphRAG for comprehensive context.
@@ -288,6 +298,8 @@ const clusterContext = await localSearch({
 
 **Returns**: Dependency chain PLUS semantic context from the cluster!
 
+---
+
 ## How They Work Together Under the Hood
 
 **Here's what many users don't realize**: GraphRAG actually uses the same graph traversal infrastructure as PathRAG!
@@ -314,6 +326,8 @@ PathRAG  = Direct graph traversal for queries
 - Both use: Same entity and edge data
 - PathRAG stores: Nothing (pure query-time)
 - GraphRAG stores: Pre-computed communities in `COMMUNITY_INDEX`
+
+---
 
 ## Practical Decision Guide
 
@@ -402,6 +416,8 @@ const similarDocs = await localSearch({
 return [...docs.entities, ...similarDocs];
 ```
 
+---
+
 ## Performance Comparison
 
 | Strategy | Typical Latency | Use Case | Pre-computation |
@@ -412,6 +428,8 @@ return [...docs.entities, ...similarDocs];
 | **Hybrid** | 100-400ms | Comprehensive context | Community detection |
 
 **Key Takeaway**: PathRAG is fastest (no pre-computation), GraphRAG Global is most comprehensive.
+
+---
 
 ## Progressive Learning Path
 
@@ -472,6 +490,8 @@ query {
 - Fast initial results + comprehensive expansion
 - Best of both approaches
 
+---
+
 ## Common Pitfalls
 
 ### Pitfall 1: Using PathRAG for Semantic Search
@@ -529,6 +549,8 @@ POST /entity/service-api/path
 }
 ```
 
+---
+
 ## Summary
 
 **PathRAG** = "Follow the relationships" (structural)
@@ -551,12 +573,14 @@ POST /entity/service-api/path
 - Combine semantic and structural
 - Maximum context and relevance
 
+---
+
 ## Next Steps
 
-- **Learn PathRAG**: Read [PathRAG Guide](pathrag.md) for graph traversal patterns
-- **Learn GraphRAG**: Read [GraphRAG Guide](graphrag.md) for community search
-- **Try Hybrid Queries**: Read [Hybrid Query Patterns](hybrid-queries.md) for practical examples
-- **Configure Your System**: See [Embedding Strategies](embedding-strategies.md) for setup
+- **PathRAG and GraphRAG Deep Dive**: Read [PathRAG vs GraphRAG Decisions](01-pathrag-graphrag-decisions.md)
+- **Try Hybrid Queries**: Read [Hybrid Query Patterns](06-hybrid-queries.md) for practical examples
+- **Configure Your System**: See [Embedding Decision Guide](../semantic/04-decision-guide.md) for setup
+- **Performance Tuning**: Review [Performance Tuning](02-performance-tuning.md)
 
 ---
 

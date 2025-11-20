@@ -785,14 +785,15 @@ type Config struct {
 }
 ```
 
-See `docs/MIGRATION_GUIDE.md` for detailed migration instructions.
+See **Migration Guide** (TODO) for detailed migration instructions.
 
 ## Related Documentation
 
-- [Schema Generation System](./SCHEMA_GENERATION.md) - Overall architecture
-- [Contract Testing](./CONTRACT_TESTING.md) - Validating schemas
-- [Migration Guide](./MIGRATION_GUIDE.md) - Migrating from manual schemas
-- [OpenAPI Integration](./OPENAPI_INTEGRATION.md) - OpenAPI spec generation
+- **Schema Generation System** - See `semstreams/docs/SCHEMA_GENERATION.md` for implementation details
+- **Contract Testing** - See `semstreams/docs/CONTRACT_TESTING.md` for schema validation strategy
+- [OpenAPI Usage](../integration/openapi-usage.md) - How to consume OpenAPI specs (both use cases)
+- **Migration Guide** - TODO: Document migration from manual schemas to schema tags
+- [Writing Components](./writing-components.md) - Complete component development guide
 
 ## Summary
 

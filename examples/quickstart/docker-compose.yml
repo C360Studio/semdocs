@@ -1,0 +1,60 @@
+# SemStreams Quickstart
+#
+# The simplest way to run SemStreams - just NATS + SemStreams.
+# Uses minimal config file with sensible defaults.
+#
+# Usage:
+#   docker compose up -d
+#
+# Access:
+#   - API: http://localhost:8080
+#   - Health: http://localhost:8080/health
+#   - Metrics: http://localhost:9090/metrics
+#
+# To stop:
+#   docker compose down
+
+services:
+  # NATS Message Broker
+  nats:
+    image: nats:latest
+    container_name: semstreams-quickstart-nats
+    command: ["--jetstream"]
+    ports:
+      - "4222:4222"  # NATS client port
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # SemStreams Application
+  semstreams:
+    image: ghcr.io/c360studio/semstreams:latest
+    container_name: semstreams-quickstart
+    depends_on:
+      nats:
+        condition: service_healthy
+    ports:
+      - "8080:8080"  # HTTP API
+      - "9090:9090"  # Prometheus metrics
+    volumes:
+      - ./config.minimal.json:/etc/semstreams/config.json:ro
+    command: ["--config", "/etc/semstreams/config.json"]
+    environment:
+      # Required: NATS connection
+      SEMSTREAMS_NATS_URL: nats://nats:4222
+
+      # Optional: Defaults shown here (can omit these)
+      # SEMSTREAMS_LOG_LEVEL: info           # Default: info
+      # SEMSTREAMS_METRICS_ENABLED: true     # Default: true
+      # SEMSTREAMS_HTTP_PORT: 8080           # Default: 8080
+      # SEMSTREAMS_METRICS_PORT: 9090        # Default: 9090
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped

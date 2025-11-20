@@ -1,0 +1,87 @@
+# SemStreams with Visual Flow Builder UI
+#
+# Backend + Frontend stack for visual flow development.
+# Includes drag-and-drop flow builder for creating data pipelines.
+# Uses minimal config with sensible defaults.
+#
+# Usage:
+#   docker compose up -d
+#
+# Access:
+#   - UI: http://localhost:3000
+#   - API: http://localhost:8080
+#
+# To stop:
+#   docker compose down
+
+services:
+  # NATS Message Broker
+  nats:
+    image: nats:latest
+    container_name: semstreams-ui-nats
+    command: ["--jetstream"]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - semstreams-net
+
+  # SemStreams Backend
+  semstreams:
+    image: ghcr.io/c360studio/semstreams:latest
+    container_name: semstreams-ui-backend
+    depends_on:
+      nats:
+        condition: service_healthy
+    ports:
+      - "8080:8080"  # HTTP API (for UI)
+      - "9090:9090"  # Metrics
+    volumes:
+      - ./config.minimal.json:/etc/semstreams/config.json:ro
+    command: ["--config", "/etc/semstreams/config.json"]
+    environment:
+      SEMSTREAMS_NATS_URL: nats://nats:4222
+      SEMSTREAMS_LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - semstreams-net
+
+  # SemStreams UI (Flow Builder)
+  ui:
+    image: ghcr.io/c360studio/semstreams-ui:latest
+    container_name: semstreams-ui-frontend
+    depends_on:
+      semstreams:
+        condition: service_healthy
+    ports:
+      - "3000:3000"  # Web interface
+    environment:
+      # Backend connection
+      BACKEND_HOST: semstreams:8080
+
+      # UI defaults (shown for reference, can omit)
+      # NODE_ENV: production              # Default: production
+      # PORT: 3000                        # Default: 3000
+      # ORIGIN: http://localhost:3000     # Default: http://localhost:3000
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - semstreams-net
+
+networks:
+  semstreams-net:
+    driver: bridge

@@ -648,14 +648,14 @@ Or use GraphQL Playground for interactive exploration: http://localhost:8080/gra
 
 **Query Strategies**:
 
-- [PathRAG Guide](../guides/pathrag.md) - Graph traversal for dependencies
-- [GraphRAG Guide](../guides/graphrag.md) - Semantic similarity search
-- [Choosing Your Query Strategy](../guides/choosing-query-strategy.md) - Decision tree
+- [PathRAG vs GraphRAG Decisions](../advanced/01-pathrag-graphrag-decisions.md) - Choosing the right query strategy
+- [Hybrid Query Patterns](../advanced/06-hybrid-queries.md) - Combining PathRAG and GraphRAG
+- [Query Strategy Guide](../advanced/07-query-strategies.md) - Decision tree and use cases
 
 **System Guides**:
 
-- [Message System](../guides/message-system.md) - How data flows through SemStreams
-- [Vocabulary System](../guides/vocabulary-system.md) - Semantic predicates
+- [Message System](../basics/05-message-system.md) - How data flows through SemStreams
+- [Components](../basics/02-components.md) - Component types and configuration
 
 **Integration**:
 
@@ -664,7 +664,8 @@ Or use GraphQL Playground for interactive exploration: http://localhost:8080/gra
 
 **Architecture**:
 
-- [Architecture Overview](../getting-started/architecture.md) - High-level system design
+- [What is SemStreams](../basics/01-what-is-semstreams.md) - High-level system design
+- [Architecture Deep Dive](../advanced/03-architecture-deep-dive.md) - Detailed architecture
 
 ---
 

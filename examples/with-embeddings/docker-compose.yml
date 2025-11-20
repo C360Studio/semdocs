@@ -1,0 +1,103 @@
+# SemStreams with Semantic Search
+#
+# Adds neural embeddings for semantic search capabilities.
+# Includes semembed service for OpenAI-compatible embeddings API.
+# Uses minimal config with sensible defaults.
+#
+# Usage:
+#   docker compose up -d
+#
+# Access:
+#   - API: http://localhost:8080
+#   - Embeddings: http://localhost:8081
+#
+# Note: First startup downloads embedding model (~60MB), takes 30-60 seconds.
+
+services:
+  # NATS Message Broker
+  nats:
+    image: nats:latest
+    container_name: semstreams-embed-nats
+    command: ["--jetstream"]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - semstreams-net
+
+  # SemEmbed - Neural Embedding Service
+  semembed:
+    image: ghcr.io/c360studio/semembed:latest
+    container_name: semstreams-semembed
+    ports:
+      - "8081:8081"  # OpenAI-compatible API
+    environment:
+      # Model selection (defaults shown)
+      SEMEMBED_MODEL: BAAI/bge-small-en-v1.5  # Default: good balance of speed/quality
+      # Alternative models:
+      # SEMEMBED_MODEL: BAAI/bge-base-en-v1.5     # Higher quality, 768 dims
+      # SEMEMBED_MODEL: sentence-transformers/all-MiniLM-L6-v2  # Faster, 384 dims
+
+      # Optional defaults (can omit)
+      # SEMEMBED_PORT: 8081           # Default: 8081
+      # RUST_LOG: info                # Default: info
+    volumes:
+      # Persist downloaded models
+      - semembed-cache:/home/semembed/.cache/fastembed
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s  # Model download may take time
+    restart: unless-stopped
+    networks:
+      - semstreams-net
+
+  # SemStreams with Semantic Indexing
+  semstreams:
+    image: ghcr.io/c360studio/semstreams:latest
+    container_name: semstreams-embed-backend
+    depends_on:
+      nats:
+        condition: service_healthy
+      semembed:
+        condition: service_healthy
+    ports:
+      - "8080:8080"  # HTTP API
+      - "9090:9090"  # Metrics
+    volumes:
+      - ./config.minimal.json:/etc/semstreams/config.json:ro
+    command: ["--config", "/etc/semstreams/config.json"]
+    environment:
+      # NATS connection
+      SEMSTREAMS_NATS_URL: nats://nats:4222
+
+      # Embedding service configuration
+      EMBEDDING_PROVIDER: http                        # Use HTTP provider
+      EMBEDDING_HTTP_ENDPOINT: http://semembed:8081/v1/embeddings  # OpenAI-compatible endpoint
+      EMBEDDING_HTTP_MODEL: BAAI/bge-small-en-v1.5   # Must match semembed model
+
+      # Optional: Embedding defaults (can omit)
+      # EMBEDDING_ENABLED: true        # Default: true if provider configured
+      # EMBEDDING_DIMENSIONS: 384      # Default: auto-detected from model
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - semstreams-net
+
+volumes:
+  semembed-cache:
+    driver: local
+
+networks:
+  semstreams-net:
+    driver: bridge
