@@ -600,7 +600,7 @@ curl http://localhost:8080/admin/messages?subject=raw.udp
 - **[First Flow](04-first-flow.md)** - Build your first event flow
 - **[Components](02-components.md)** - Component types reference
 - **[Graph Queries](../graph/03-queries.md)** - Query the graph
-- **[Architecture Deep Dive](../advanced/03-architecture-deep-dive.md)** - How routing works internally
+- **[Architecture Deep Dive](../advanced/02-architecture-deep-dive.md)** - How routing works internally
 
 ---
 

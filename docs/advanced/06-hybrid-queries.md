@@ -760,10 +760,13 @@ async function robustHybridQuery(entityID, query) {
 
 ## Next Steps
 
-- **Understand PathRAG and GraphRAG**: Read [PathRAG vs GraphRAG Decisions](01-pathrag-graphrag-decisions.md)
-- **Choose Strategy**: See [Choosing Your Query Strategy](07-query-strategies.md)
-- **Configure Embeddings**: Review [Embedding Decision Guide](../semantic/04-decision-guide.md)
-- **Performance Tuning**: Read [Performance Tuning](02-performance-tuning.md)
+- **[Performance Tuning](07-performance-tuning.md)** - Optimize hybrid query performance
+- **[Production Patterns](08-production-patterns.md)** - Deploy hybrid query workloads
+
+**Reference:**
+- **[Query Fundamentals](01-query-fundamentals.md)** - Understand PathRAG and GraphRAG concepts
+- **[Practical Query Patterns](05-query-strategies.md)** - Single-strategy patterns
+- **[Configuration Guide](04-configuration-guide.md)** - Enable features based on your data
 
 ---
 

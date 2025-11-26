@@ -1,6 +1,6 @@
 # Components
 
-**Understanding SemStreams component types and how they work**
+## Understanding SemStreams component types and how they work
 
 ---
 
@@ -85,8 +85,8 @@ Listens for UDP packets on a port.
 ```
 
 **Use cases:**
+
 - MAVLink telemetry
-- Syslog messages
 - IoT sensor data
 - Network monitoring
 
@@ -120,44 +120,11 @@ Receives HTTP POST requests.
 ```
 
 **Use cases:**
+
 - Webhooks
 - API integrations
 - Mobile app events
 - Browser analytics
-
----
-
-### MQTT Input
-
-Subscribes to MQTT topics.
-
-```json
-{
-  "mqtt": {
-    "type": "input",
-    "name": "mqtt_listener",
-    "enabled": true,
-    "config": {
-      "ports": {
-        "outputs": [
-          {
-            "name": "mqtt_out",
-            "subject": "raw.mqtt.messages"
-          }
-        ]
-      },
-      "broker": "mqtt://broker:1883",
-      "topics": ["sensors/#", "alerts/+"]
-    }
-  }
-}
-```
-
-**Use cases:**
-- IoT devices
-- Home automation
-- Industrial sensors
-- Vehicle telemetry
 
 ---
 
@@ -236,6 +203,7 @@ Filters messages based on criteria.
 ```
 
 **Filter operators:**
+
 - `equals`, `not_equals`
 - `gt`, `gte`, `lt`, `lte` (numeric comparisons)
 - `contains`, `starts_with`, `ends_with` (string matching)
@@ -280,6 +248,7 @@ Converts JSON messages to graph entities.
 ```
 
 **Key mappings:**
+
 - **entity_id_field:** JSON field containing entity ID
 - **entity_type_field:** JSON field containing entity type
 - **entity_class:** Object, Event, or Concept
@@ -321,6 +290,7 @@ Evaluates rules against messages and entities.
 ```
 
 **Rule integration:**
+
 - Evaluates rules against incoming messages
 - Optionally creates graph entities when rules trigger
 - Publishes triggered rule events
@@ -359,6 +329,7 @@ Builds and maintains the semantic graph.
 ```
 
 **Core functionality:**
+
 - Stores entities in NATS KV
 - Builds relationship indexes
 - Enables graph queries

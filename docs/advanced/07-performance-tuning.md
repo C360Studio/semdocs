@@ -491,10 +491,13 @@ INTEGRATION_TESTS=1 go test -bench=. ./processor/graph
 
 ## Next Steps
 
-- **[PathRAG vs GraphRAG Decisions](01-pathrag-graphrag-decisions.md)** - Choose the right configuration
-- **[Architecture Deep Dive](03-architecture-deep-dive.md)** - Understand system internals
-- **[Production Patterns](04-production-patterns.md)** - Deployment best practices
-- **[Algorithm Reference](05-algorithm-reference.md)** - Native algorithm details
+- **[Production Patterns](08-production-patterns.md)** - Deployment best practices
+
+**Reference:**
+- **[Query Fundamentals](01-query-fundamentals.md)** - Understand PathRAG and GraphRAG
+- **[Architecture Deep Dive](02-architecture-deep-dive.md)** - System internals
+- **[Algorithm Reference](03-algorithm-reference.md)** - Native algorithm details
+- **[Configuration Guide](04-configuration-guide.md)** - Enable/disable features
 
 ---
 

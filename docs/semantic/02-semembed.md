@@ -58,6 +58,7 @@ docker run -d \
 ```
 
 **Fields:**
+
 - **service_url:** SemEmbed endpoint
 - **batch_size:** Number of texts to embed per request (16-64)
 - **timeout:** Request timeout
@@ -70,6 +71,7 @@ docker run -d \
 ### Automatic (via Graph Processor)
 
 When enabled, graph processor automatically:
+
 1. Extracts text from configured fields
 2. Sends to SemEmbed
 3. Stores vector in entity

@@ -1,6 +1,6 @@
 # SemSummarize Service
 
-**LLM-powered entity summarization**
+## LLM-powered entity summarization
 
 ---
 
@@ -30,6 +30,7 @@ ollama pull llama2
 ### OpenAI API (Cloud)
 
 Set API key in environment:
+
 ```bash
 export OPENAI_API_KEY=sk-...
 ```

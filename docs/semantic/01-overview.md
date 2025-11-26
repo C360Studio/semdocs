@@ -11,6 +11,7 @@
 Go algorithms built into the runtime.
 
 **Algorithms:**
+
 - TF-IDF (term frequency-inverse document frequency)
 - BM25 (best matching 25)
 - Cosine similarity
@@ -30,12 +31,14 @@ See [Algorithm Reference](../advanced/05-algorithm-reference.md) for details.
 External services for higher quality.
 
 **SemEmbed:** Transformer-based vector embeddings
+
 - Model: all-MiniLM-L6-v2 (384 dimensions)
 - Much better semantic similarity than native
 - ~2GB RAM, GPU optional
 - OpenAI API-compatible
 
 **SemSummarize:** LLM-powered summarization
+
 - Richer entity descriptions
 - Any OpenAI API-compatible service (local or cloud)
 - Examples: Ollama, LM Studio, OpenAI API

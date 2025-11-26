@@ -1,12 +1,16 @@
-# Choosing Your Query Strategy
+# Practical Query Patterns
 
-Making sense of PathRAG, GraphRAG, and when to use them together
+**Applying PathRAG, GraphRAG, and hybrid strategies to real-world scenarios**
+
+---
+
+> **Prerequisite**: This guide assumes you understand [Query Fundamentals](01-query-fundamentals.md) - what PathRAG and GraphRAG are. This document focuses on **practical application patterns**.
 
 ---
 
 ## Overview
 
-SemStreams provides two powerful query strategies that solve different problems. This guide helps you choose the right tool for your use case - or combine both for even better results.
+This guide provides concrete examples of when and how to use each query strategy. Use the decision tree for quick reference, then see detailed patterns below.
 
 ## The Quick Decision Tree
 
@@ -577,10 +581,13 @@ POST /entity/service-api/path
 
 ## Next Steps
 
-- **PathRAG and GraphRAG Deep Dive**: Read [PathRAG vs GraphRAG Decisions](01-pathrag-graphrag-decisions.md)
-- **Try Hybrid Queries**: Read [Hybrid Query Patterns](06-hybrid-queries.md) for practical examples
-- **Configure Your System**: See [Embedding Decision Guide](../semantic/04-decision-guide.md) for setup
-- **Performance Tuning**: Review [Performance Tuning](02-performance-tuning.md)
+- **[Hybrid Query Patterns](06-hybrid-queries.md)** - Advanced combined query examples
+- **[Performance Tuning](07-performance-tuning.md)** - Optimize your queries
+- **[Production Patterns](08-production-patterns.md)** - Deployment best practices
+
+**Reference:**
+- **[Query Fundamentals](01-query-fundamentals.md)** - Conceptual foundation
+- **[Configuration Guide](04-configuration-guide.md)** - Enable/disable features based on your data
 
 ---
 

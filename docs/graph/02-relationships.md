@@ -6,222 +6,209 @@
 
 ## What are Relationships?
 
-Relationships connect entities, forming the graph structure. Also called **edges** or **predicates**.
+Relationships connect entities, forming the graph structure. In SemStreams, relationships are expressed in two ways:
+
+1. **Triples** - Semantic facts where the Object is another EntityID
+2. **Edges** - Computed relationships with weight/confidence (proximity, algorithms)
 
 **Example graph:**
 
+```text
+acme.telemetry.robotics.gcs1.drone.001 ──ops.fleet.member_of──> acme.ops.logistics.hq.fleet.rescue
+acme.telemetry.robotics.gcs1.drone.002 ──ops.fleet.member_of──> acme.ops.logistics.hq.fleet.rescue
+acme.telemetry.robotics.gcs1.drone.001 ──geo.location.stationed_at──> acme.ops.facilities.west.base.main
 ```
-UAV-001 ──belongs_to──> fleet-rescue
-UAV-002 ──belongs_to──> fleet-rescue
-UAV-001 ──located_at──> base-west
-fleet-rescue ──stationed_at──> base-west
-```
-
-**PathRAG queries use these relationships** to traverse the graph (e.g., "find all drones in fleet-rescue").
 
 ---
 
-## Relationship Structure
+## Relationship Sources
 
-**In entity:**
+### From Triples (Semantic Facts)
 
-```json
-{
-  "id": "UAV-001",
-  "edges": [
-    {
-      "predicate": "belongs_to",
-      "target": "fleet-rescue",
-      "properties": {
-        "assigned_at": "2024-01-01T00:00:00Z",
-        "role": "primary-drone"
-      }
-    },
-    {
-      "predicate": "located_at",
-      "target": "base-west"
+The primary way to express relationships. When implementing `Graphable.Triples()`, return triples where the Object is another entity's ID. Triples include RDF*-like metadata for provenance and confidence.
+
+```go
+func (d *DronePayload) Triples() []Triple {
+    entityID := d.EntityID()
+    fleetID := fmt.Sprintf("acme.ops.logistics.hq.fleet.%s", d.Fleet)
+    now := time.Now()
+
+    return []Triple{
+        // Property triple (value object)
+        {
+            Subject:    entityID,
+            Predicate:  "robotics.battery.level",
+            Object:     d.Battery,
+            Source:     "mavlink_battery",
+            Timestamp:  now,
+            Confidence: 1.0,
+        },
+
+        // Relationship triple (entity reference)
+        {
+            Subject:    entityID,
+            Predicate:  "ops.fleet.member_of",
+            Object:     fleetID,  // Another entity ID = relationship
+            Source:     "fleet_assignment",
+            Timestamp:  now,
+            Confidence: 1.0,
+        },
+
+        // Relationship triple with lower confidence (inferred)
+        {
+            Subject:    entityID,
+            Predicate:  "robotics.operator.controlled_by",
+            Object:     d.OperatorID,
+            Source:     "session_inference",
+            Timestamp:  now,
+            Confidence: 0.8,  // Inferred from active session
+        },
     }
-  ]
 }
 ```
 
-**Fields:**
+**Key insight:** SemStreams doesn't "infer" relationships from properties. You explicitly declare them in Triples(). The system determines relationship vs property using `triple.IsRelationship()` which checks if Object is a valid 6-part EntityID.
 
-- **predicate**: Relationship type (the verb)
-- **target**: Target entity ID
-- **properties**: (Optional) Metadata about the relationship
+### From Edges (Computed Relationships)
+
+Edges are stored on EntityState for computed relationships like proximity:
+
+```go
+type Edge struct {
+    ToEntityID string         `json:"to_entity_id"`
+    EdgeType   string         `json:"edge_type"`            // "NEAR", "POWERED_BY", etc.
+    Weight     float64        `json:"weight,omitempty"`     // Distance, strength
+    Confidence float64        `json:"confidence,omitempty"` // 0.0-1.0
+    Properties map[string]any `json:"properties,omitempty"`
+    CreatedAt  time.Time      `json:"created_at"`
+    ExpiresAt  *time.Time     `json:"expires_at,omitempty"` // Temporary relationships
+}
+```
+
+**Example edge (proximity):**
+
+```json
+{
+  "to_entity_id": "acme.telemetry.robotics.gcs1.drone.002",
+  "edge_type": "NEAR",
+  "weight": 150.5,
+  "confidence": 0.95,
+  "properties": {"distance_meters": 150.5},
+  "created_at": "2024-01-15T10:30:00Z",
+  "expires_at": "2024-01-15T10:35:00Z"
+}
+```
 
 ---
 
 ## Predicate Types
 
-### Hierarchical (belongs_to, part_of, child_of)
+Use vocabulary registry predicates (dotted notation):
 
-Represents containment or membership.
+### Hierarchical (membership, containment)
 
-```
-UAV-001 ──belongs_to──> fleet-rescue
-sensor-42 ──part_of──> UAV-001
-```
-
-**Query pattern:** "Find all drones in fleet X" (common in fleet management)
-
----
-
-### Spatial (located_at, near, adjacent_to)
-
-Represents physical location or proximity.
-
-```
-UAV-001 ──located_at──> base-west
-UAV-001 ──near──> UAV-002
+```go
+{Subject: droneID, Predicate: "ops.fleet.member_of", Object: fleetID}
+{Subject: sensorID, Predicate: "robotics.component.part_of", Object: droneID}
 ```
 
-**Query pattern:** "Find all entities near this location"
+**Query pattern:** "Find all drones in fleet X"
 
----
+### Spatial (location, proximity)
 
-### Temporal (follows, precedes, during)
-
-Represents time-based relationships.
-
-```
-mission-042 ──follows──> mission-041
-event-alert ──during──> mission-042
+```go
+{Subject: droneID, Predicate: "geo.location.stationed_at", Object: baseID}
+{Subject: droneID, Predicate: "geo.location.operating_in", Object: zoneID}
 ```
 
-**Query pattern:** "Find events during mission X"
+**Query pattern:** "Find all entities in zone X"
 
----
+### Operational (control, assignment)
 
-### Causal (triggered_by, caused_by, results_in)
-
-Represents cause and effect.
-
+```go
+{Subject: droneID, Predicate: "robotics.operator.controlled_by", Object: operatorID}
+{Subject: droneID, Predicate: "ops.mission.assigned_to", Object: missionID}
 ```
-alert-001 ──triggered_by──> UAV-002
-mission-abort ──caused_by──> battery-failure
+
+**Query pattern:** "Find drones assigned to mission X"
+
+### Causal (triggers, causes)
+
+```go
+{Subject: alertID, Predicate: "events.trigger.triggered_by", Object: sensorID}
+{Subject: abortID, Predicate: "events.cause.caused_by", Object: failureID}
 ```
 
 **Query pattern:** "What caused this alert?"
 
 ---
 
-### Semantic (related_to, similar_to, variant_of)
+## Predicate Naming
 
-Represents conceptual relationships.
+Use **dotted notation** from the vocabulary registry:
 
-```
-spec-auth ──related_to──> spec-user-mgmt
-design-v2 ──variant_of──> design-v1
-```
-
-**Query pattern:** "Find related documents"
-
----
-
-## Creating Relationships
-
-### Automatic (from properties)
-
-Most common - SemStreams infers relationships from entity properties.
-
-**Entity message:**
-
-```json
-{
-  "entity_id": "UAV-001",
-  "fleet": "rescue",
-  "location": "base-west"
-}
+```text
+domain.category.property
 ```
 
-**Inferred relationships:**
+**Examples:**
 
-```
-UAV-001 ──belongs_to──> fleet-rescue
-UAV-001 ──located_at──> base-west
-```
+| Predicate | Meaning |
+|-----------|---------|
+| `ops.fleet.member_of` | Entity belongs to fleet |
+| `geo.location.stationed_at` | Entity stationed at location |
+| `robotics.operator.controlled_by` | Entity controlled by operator |
+| `events.trigger.triggered_by` | Event triggered by entity |
 
-**Property-to-predicate mapping:**
+**Not snake_case:**
 
-- `fleet` → `belongs_to` predicate
-- `location` → `located_at` predicate
-- `parent` → `child_of` predicate (inverse)
-
----
-
-### Explicit (edges field)
-
-Manually specify relationships.
-
-```json
-{
-  "id": "UAV-001",
-  "edges": [
-    {
-      "predicate": "assigned_to",
-      "target": "mission-042",
-      "properties": {"priority": "high"}
-    }
-  ]
-}
+```text
+belongs_to          # Wrong
+ops.fleet.member_of # Right
 ```
 
----
-
-### Via API
-
-Create relationships via HTTP.
-
-```bash
-curl -X POST http://localhost:8080/graph/relationship \
-  -d '{
-    "source": "UAV-001",
-    "predicate": "monitors",
-    "target": "sensor-42"
-  }'
-```
+See: [Vocabulary Registry](../basics/06-vocabulary-registry.md)
 
 ---
 
 ## Querying Relationships
 
-### Forward Traversal
+### Forward Traversal (Outgoing)
 
 Find entities this entity points to.
 
-```bash
-# Find what UAV-001 belongs to
-curl "http://localhost:8080/graph/query?source=UAV-001&predicate=belongs_to"
-```
+**GraphQL:**
 
-**Response:**
-
-```json
-{
-  "relationships": [
-    {
-      "source": "UAV-001",
-      "predicate": "belongs_to",
-      "target": "fleet-rescue"
+```graphql
+query {
+  entity(id: "acme.telemetry.robotics.gcs1.drone.001") {
+    id
+    triples(predicate: "ops.fleet.member_of") {
+      object
     }
-  ]
+  }
 }
 ```
 
----
-
 ### Reverse Traversal (Incoming)
 
-Find entities that point to this entity.
+Find entities that point to this entity. Requires INCOMING_INDEX.
 
-```bash
-# Find all drones in fleet-rescue
-curl "http://localhost:8080/graph/query?target=fleet-rescue&predicate=belongs_to"
+**GraphQL:**
+
+```graphql
+query {
+  entitiesWithRelationship(
+    target: "acme.ops.logistics.hq.fleet.rescue"
+    predicate: "ops.fleet.member_of"
+  ) {
+    id
+    type
+  }
+}
 ```
 
-**Requires incoming index** enabled:
+**Enable incoming index:**
 
 ```json
 {
@@ -237,159 +224,80 @@ curl "http://localhost:8080/graph/query?target=fleet-rescue&predicate=belongs_to
 }
 ```
 
----
-
-### Multi-hop Traversal
+### Multi-Hop Traversal (PathRAG)
 
 Find entities N hops away.
 
-```bash
-# Find all sensors on drones in fleet-rescue (2 hops)
-curl -X POST http://localhost:8080/graph/traverse \
-  -d '{
-    "start": "fleet-rescue",
-    "hops": [
-      {"predicate": "belongs_to", "direction": "incoming"},
-      {"predicate": "has_sensor", "direction": "outgoing"}
-    ]
-  }'
+**Example:** Find sensors on drones in fleet-rescue (2 hops)
+
+```text
+fleet.rescue ←member_of← drone.001 →has_component→ sensor.42
+fleet.rescue ←member_of← drone.002 →has_component→ sensor.43
 ```
 
-**Result:**
-
-```
-fleet-rescue ←belongs_to← UAV-001 ─has_sensor→ sensor-42
-fleet-rescue ←belongs_to← UAV-002 ─has_sensor→ sensor-43
-```
+See: [Query Fundamentals](../advanced/01-query-fundamentals.md) for PathRAG details.
 
 ---
 
-## Relationship Properties
+## Triples vs Edges
 
-Relationships can have metadata.
+| Aspect | Triples | Edges |
+|--------|---------|-------|
+| Source | Graphable.Triples() | Computed (proximity, algorithms) |
+| Structure | Subject-Predicate-Object | ToEntityID, EdgeType, Weight, Confidence |
+| Temporal | Always current | Can expire (ExpiresAt) |
+| Semantic | Rich predicates | Simple types (NEAR, POWERED_BY) |
+| Use case | Domain relationships | Computed relationships |
 
-```json
-{
-  "edges": [
-    {
-      "predicate": "assigned_to",
-      "target": "mission-042",
-      "properties": {
-        "assigned_at": "2024-01-15T10:00:00Z",
-        "assigned_by": "user-alice",
-        "priority": "high",
-        "expires_at": "2024-01-15T18:00:00Z"
-      }
-    }
-  ]
-}
-```
+**Use Triples for:** Domain relationships declared by payloads
 
-**Query by relationship properties:**
-
-```bash
-# Find high-priority assignments
-curl "http://localhost:8080/graph/query?predicate=assigned_to&properties.priority=high"
-```
-
----
-
-## Bidirectional Relationships
-
-Some relationships are bidirectional.
-
-**Example:**
-
-```
-UAV-001 ──near──> UAV-002
-UAV-002 ──near──> UAV-001
-```
-
-**Automatic inverse:**
-
-Configure automatic inverse creation:
-
-```json
-{
-  "graph": {
-    "config": {
-      "relationship_inverses": {
-        "near": "near",
-        "belongs_to": "contains",
-        "child_of": "parent_of"
-      }
-    }
-  }
-}
-```
-
-**Behavior:**
-
-Create `UAV-001 ──belongs_to──> fleet-rescue`
-→ Automatically creates `fleet-rescue ──contains──> UAV-001`
+**Use Edges for:** Computed relationships (proximity, graph algorithms)
 
 ---
 
 ## Best Practices
 
-### Predicate Naming
+### Declare Relationships in Triples
 
-✅ **Good:** `belongs_to`, `located_at`, `triggered_by`
-❌ **Bad:** `has`, `link`, `related`
-
-Use descriptive verbs that clarify the relationship type.
-
-### Relationship Direction
-
-**Be consistent:**
-
-```
-✅ drone ──belongs_to──> fleet
-❌ fleet ──has──> drone
-
-✅ alert ──triggered_by──> sensor
-❌ sensor ──triggers──> alert
-```
-
-Choose a primary direction and stick with it. Use incoming index for reverse queries.
-
-### Property Usage
-
-**Use relationship properties for metadata ABOUT the relationship:**
-
-```json
-{
-  "predicate": "assigned_to",
-  "target": "mission-042",
-  "properties": {
-    "assigned_at": "2024-01-15T10:00:00Z",  // When assigned
-    "assigned_by": "user-alice"              // Who assigned
-  }
+```go
+func (d *DronePayload) Triples() []Triple {
+    return []Triple{
+        // Good: Explicit relationship declaration
+        {Subject: d.EntityID(), Predicate: "ops.fleet.member_of", Object: d.FleetID()},
+    }
 }
 ```
 
-**Don't use relationship properties for target entity properties:**
+Don't expect SemStreams to infer relationships from property names.
 
-```json
-❌ Bad:
-{
-  "predicate": "assigned_to",
-  "target": "mission-042",
-  "properties": {
-    "mission_status": "active",     // This belongs on mission-042 entity
-    "mission_priority": "high"      // This belongs on mission-042 entity
-  }
-}
+### Use Consistent Predicate Direction
+
+Pick a direction and stick with it:
+
+```text
+drone ──member_of──> fleet      # Preferred direction
+```
+
+Use incoming index for reverse queries rather than creating inverse predicates.
+
+### Use 6-Part Entity IDs in Relationships
+
+```go
+// Good: Full 6-part ID
+{Subject: droneID, Predicate: "ops.fleet.member_of", Object: "acme.ops.logistics.hq.fleet.rescue"}
+
+// Bad: Simple ID
+{Subject: droneID, Predicate: "ops.fleet.member_of", Object: "rescue"}
 ```
 
 ---
 
 ## Next Steps
 
-- **[Queries](03-queries.md)** - Advanced graph queries
+- **[Queries](03-queries.md)** - Query the graph
 - **[Indexing](04-indexing.md)** - Index configuration for relationship queries
-- **[PathRAG Decisions](../advanced/01-pathrag-graphrag-decisions.md)** - When to use relationship traversal
+- **[Query Fundamentals](../advanced/01-query-fundamentals.md)** - PathRAG traversal strategies
 
 ---
 
-**Relationships form the graph** - Entities are nodes, relationships are edges. Together they enable powerful traversal queries.
+**Key Takeaway:** Relationships come from Triples (declared in Graphable.Triples()) and Edges (computed). Use vocabulary predicates in dotted notation, not snake_case. Don't expect relationship inference - declare relationships explicitly.

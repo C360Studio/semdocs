@@ -6,7 +6,7 @@
 
 ## System Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                        SemStreams Runtime                    │
 ├─────────────────────────────────────────────────────────────┤
@@ -51,6 +51,41 @@
 
 ---
 
+## Entity ID Architecture
+
+### Federated Entity IDs
+
+SemStreams uses **6-part federated entity IDs** to enable multi-tenant, multi-platform deployments:
+
+```text
+org.platform.domain.system.type.instance
+```
+
+**Components:**
+
+| Part | Description | Example |
+|------|-------------|---------|
+| `org` | Organization identifier | `c360` |
+| `platform` | Platform/deployment | `platform1` |
+| `domain` | Business domain | `robotics` |
+| `system` | System within domain | `gcs1` |
+| `type` | Entity type | `drone` |
+| `instance` | Unique instance ID | `1` |
+
+**Examples:**
+
+```text
+c360.platform1.robotics.gcs1.drone.1
+c360.platform1.robotics.mav1.battery.0
+c360.platform1.logistics.warehouse1.sensor.temp42
+```
+
+**Validation:**
+
+Entity IDs must match the pattern: `^[a-zA-Z0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+$`
+
+---
+
 ## Event Flow Architecture
 
 ### Message Bus Pattern
@@ -58,13 +93,15 @@
 SemStreams uses a **publish/subscribe message bus** (NATS) instead of direct component connections.
 
 **Traditional linear approach:**
-```
+
+```text
 UDP Input → Parser → Filter → Graph → File Output
   (tight coupling, rigid flow)
 ```
 
 **SemStreams message bus approach:**
-```
+
+```text
 UDP Input
     ↓ publish("raw.udp")
 Message Bus
@@ -86,11 +123,12 @@ Message Bus
 
 ### Subject Naming Convention
 
-```
+```text
 {category}.{component}.{entity_type}.{detail}
 
 Examples:
   raw.udp.messages              # Raw UDP input
+  storage.*.events              # ObjectStore events (default input)
   events.graph.entity.drone     # Drone entity events
   events.graph.entity.*         # All entity events (wildcard)
   events.rule.triggered         # Rule trigger events
@@ -98,6 +136,7 @@ Examples:
 ```
 
 **Wildcards:**
+
 - `*` matches single token: `events.graph.entity.*` → all entity types
 - `>` matches multiple tokens: `events.>` → all events
 
@@ -109,14 +148,14 @@ The graph processor is the heart of SemStreams, automatically building entity gr
 
 ### Component Structure
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    Graph Processor                       │
 ├─────────────────────────────────────────────────────────┤
 │                                                           │
 │  ┌───────────────┐      ┌───────────────┐               │
 │  │ Message       │      │ Worker Pool   │               │
-│  │ Handler       │─────▶│ (8 workers)   │               │
+│  │ Manager       │─────▶│ (10 workers)  │               │
 │  │ (subscriber)  │      └───────┬───────┘               │
 │  └───────────────┘              │                        │
 │                                  ▼                        │
@@ -124,305 +163,361 @@ The graph processor is the heart of SemStreams, automatically building entity gr
 │                       │  Data Manager    │               │
 │                       │  • Entity CRUD   │               │
 │                       │  • Edge Tracking │               │
-│                       │  • KV Operations │               │
+│                       │  • L1/L2 Caching │               │
 │                       └────────┬─────────┘               │
 │                                │                          │
 │                 ┌──────────────┼──────────────┐          │
 │                 ▼              ▼              ▼           │
 │          ┌──────────┐   ┌──────────┐   ┌──────────┐     │
-│          │ Indexer  │   │ Querier  │   │ Embedding│     │
-│          │ Manager  │   │          │   │ Manager  │     │
+│          │ Index    │   │ Query    │   │ Embedding│     │
+│          │ Manager  │   │ Manager  │   │ (BM25/   │     │
+│          │ (5 types)│   │          │   │  HTTP)   │     │
 │          └──────────┘   └──────────┘   └──────────┘     │
 │                 │              │              │           │
 │                 └──────────────┼──────────────┘           │
 │                                ▼                          │
 │                       ┌─────────────────┐                │
-│                       │  NATS Storage   │                │
-│                       │  • Entity KV    │                │
-│                       │  • Index KV     │                │
+│                       │  NATS KV Storage│                │
+│                       │  • ENTITY_STATES│                │
+│                       │  • Index Buckets│                │
 │                       └─────────────────┘                │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ### Message Handler Flow
 
-```go
-1. Subscribe to "events.graph.entity.*"
-2. Receive Entity message
+```text
+1. Subscribe to "storage.*.events" (ObjectStore events)
+2. Receive message data
 3. Validate message structure
-4. Enqueue to worker pool (buffered channel)
-5. Worker picks up message
-6. Data Manager: Upsert entity to KV
-7. Index Manager: Update all enabled indexes
-8. Embedding Manager: Generate/update embedding (if enabled)
-9. Acknowledge message to NATS
+4. Submit to worker pool (buffered queue)
+5. Worker processes message:
+   a. MessageManager: Transform message → EntityState
+   b. DataManager: Upsert entity to ENTITY_STATES KV
+   c. IndexManager: Update all enabled indexes
+   d. EmbeddingManager: Generate/update embedding (if enabled)
+6. Acknowledge message to NATS
 ```
 
-**Worker pool pattern:**
+**Worker pool architecture:**
 
 ```go
 type Processor struct {
-    workers    int
-    queueSize  int
-    workQueue  chan *types.EntityEvent
+    workerPool *worker.Pool[[]byte]
+    config     *Config
 }
 
-func (p *Processor) Start(ctx context.Context) error {
-    // Create buffered work queue
-    p.workQueue = make(chan *types.EntityEvent, p.queueSize)
-
-    // Start N workers
-    for i := 0; i < p.workers; i++ {
-        go p.worker(ctx, i)
-    }
-
-    // Subscribe to NATS subject
-    p.subscribe("events.graph.entity.*", func(msg *nats.Msg) {
-        entity := parseEntity(msg.Data)
-        p.workQueue <- entity  // Enqueue for processing
-    })
-}
-
-func (p *Processor) worker(ctx context.Context, id int) {
-    for {
-        select {
-        case entity := <-p.workQueue:
-            p.processEntity(ctx, entity)
-        case <-ctx.Done():
-            return
-        }
-    }
-}
+// Default configuration
+Workers:      10
+QueueSize:    10000
+InputSubject: "storage.*.events"
 ```
 
 ### Data Manager: Entity Storage
 
-**KV storage pattern:**
+**KV storage pattern (ENTITY_STATES bucket):**
 
-```
-Key: entity:{entity_type}:{entity_id}
-Value: JSON-serialized Entity
-
-Example:
-  Key: entity:drone:UAV-001
-  Value: {"id":"UAV-001","type":"drone","battery":85.2,...}
-```
-
-**Edge tracking:**
-
-```
-Key: edges:{entity_id}
-Value: Set of relationship IDs
+```text
+Key:   {entity_id}
+Value: JSON-serialized EntityState
 
 Example:
-  Key: edges:UAV-001
-  Value: ["rel-001", "rel-002", "rel-003"]
+  Key:   c360.platform1.robotics.gcs1.drone.1
+  Value: {
+    "node": {
+      "id": "c360.platform1.robotics.gcs1.drone.1",
+      "type": "robotics.drone"
+    },
+    "edges": [...],
+    "triples": [
+      {"subject": "c360.platform1.robotics.gcs1.drone.1",
+       "predicate": "robotics.battery.level",
+       "object": 85.2},
+      ...
+    ],
+    "version": 3,
+    "updated_at": "2024-01-15T10:30:00Z"
+  }
 ```
 
-**Batch operations for performance:**
+**L1/L2 cache architecture:**
+
+```text
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Request    │────▶│  L1 Cache   │────▶│  L2 Cache   │
+│             │     │  (LRU)      │     │  (TTL)      │
+└─────────────┘     └──────┬──────┘     └──────┬──────┘
+                           │ miss              │ miss
+                           └───────────┬───────┘
+                                       ▼
+                              ┌─────────────┐
+                              │  NATS KV    │
+                              │  Bucket     │
+                              └─────────────┘
+```
+
+**Write coalescing for performance:**
 
 ```go
-// Instead of individual updates:
-for _, edge := range edges {
-    kv.Put(edge.ID, edge.Data)  // N round-trips
+// Buffered writes are coalesced before flushing
+// Multiple updates to same entity become single write
+buffer := []*EntityWrite{
+    {Entity: A, Op: Update},  // Entity A
+    {Entity: A, Op: Update},  // Entity A (merged)
+    {Entity: B, Op: Create},  // Entity B
 }
-
-// Batch updates:
-batch := make([]KVPair, len(edges))
-for i, edge := range edges {
-    batch[i] = KVPair{Key: edge.ID, Value: edge.Data}
-}
-kv.PutBatch(batch)  // Single round-trip
+// After coalescing: 2 writes instead of 3
 ```
 
 ---
 
 ## Index Architecture
 
-### Index Types
+### KV Bucket Overview
 
-SemStreams supports multiple index types, each optimized for specific query patterns.
+SemStreams uses separate NATS KV buckets for each index type:
+
+| Bucket | Purpose | Key Pattern |
+|--------|---------|-------------|
+| `ENTITY_STATES` | Entity storage | `{entity_id}` |
+| `PREDICATE_INDEX` | Triple predicate lookup | `{sanitized_predicate}` |
+| `INCOMING_INDEX` | Reverse relationships | `{target_entity_id}` |
+| `ALIAS_INDEX` | Name resolution | `alias--{alias}` or `entity--{id}` |
+| `SPATIAL_INDEX` | Geospatial queries | `geo_{precision}_{lat}_{lon}` |
+| `TEMPORAL_INDEX` | Time-based queries | `YYYY.MM.DD.HH` |
+
+### Index Types
 
 #### 1. Predicate Index
 
-**Purpose**: Find all relationships of a specific type
+**Purpose**: Find all entities with a specific triple predicate
 
 **Structure:**
-```
-Key: predicate:{predicate_type}
-Value: Set of entity IDs
+
+```text
+Bucket: PREDICATE_INDEX
+Key:    {sanitized_predicate}
+Value:  JSON array of entity IDs
 
 Example:
-  Key: predicate:belongs_to
-  Value: ["UAV-001", "UAV-002", "UAV-003"]
+  Key:   robotics.battery.level
+  Value: ["c360.platform1.robotics.gcs1.drone.1",
+          "c360.platform1.robotics.gcs1.drone.2",
+          "c360.platform1.robotics.mav1.drone.0"]
 ```
 
 **Query:**
-```
-Find all entities with "belongs_to" relationships
-→ Lookup "predicate:belongs_to" → Get entity ID list
+
+```text
+Find all entities with battery level triples
+→ Lookup "robotics.battery.level" in PREDICATE_INDEX
+→ Returns array of entity IDs
 ```
 
-**Performance**: O(1) lookup, returns all entities with that predicate
+**Key sanitization:** Predicates are sanitized for NATS KV compatibility (spaces → underscores, invalid chars removed, max 255 chars).
 
 #### 2. Incoming Index
 
-**Purpose**: Find entities that have relationships pointing TO this entity (reverse lookup)
+**Purpose**: Find entities that have edges pointing TO this entity (reverse lookup)
 
 **Structure:**
-```
-Key: incoming:{entity_id}:{predicate_type}
-Value: Set of source entity IDs
+
+```text
+Bucket: INCOMING_INDEX
+Key:    {target_entity_id}
+Value:  JSON array of source entity IDs
 
 Example:
-  Key: incoming:fleet-rescue:belongs_to
-  Value: ["UAV-001", "UAV-002"]  # Drones that belong to this fleet
+  Key:   c360.platform1.robotics.fleet1.fleet.rescue
+  Value: ["c360.platform1.robotics.gcs1.drone.1",
+          "c360.platform1.robotics.gcs1.drone.2"]
 ```
 
 **Query:**
-```
-Find all drones that belong to fleet-rescue
-→ Lookup "incoming:fleet-rescue:belongs_to"
+
+```text
+Find all drones that belong to fleet "rescue"
+→ Lookup "c360.platform1.robotics.fleet1.fleet.rescue" in INCOMING_INDEX
+→ Returns array of source entity IDs
 ```
 
 **Performance**: O(1) lookup for reverse relationships (critical for graph traversal)
 
 #### 3. Alias Index
 
-**Purpose**: Resolve entity names to IDs
+**Purpose**: Resolve entity names/identifiers to full entity IDs
 
-**Structure:**
-```
-Key: alias:{alias_name}
-Value: entity_id
+**Structure (bidirectional):**
 
-Example:
-  Key: alias:rescue-alpha
-  Value: UAV-001
+```text
+Bucket: ALIAS_INDEX
+
+Forward index:
+  Key:   alias--{sanitized_alias}
+  Value: entity_id (string)
+
+Reverse index (for cleanup):
+  Key:   entity--{entity_id}
+  Value: JSON array of aliases
+
+Examples:
+  Key:   alias--rescue-alpha
+  Value: "c360.platform1.robotics.gcs1.drone.1"
+
+  Key:   entity--c360.platform1.robotics.gcs1.drone.1
+  Value: ["rescue-alpha", "UAV-001"]
 ```
 
 **Query:**
-```
+
+```text
 Find entity by name "rescue-alpha"
-→ Lookup "alias:rescue-alpha" → Get "UAV-001"
-→ Lookup entity "UAV-001"
+→ Lookup "alias--rescue-alpha" in ALIAS_INDEX
+→ Get "c360.platform1.robotics.gcs1.drone.1"
+→ Lookup entity in ENTITY_STATES
 ```
 
-**Performance**: O(1) name resolution
+**Alias predicates:** The system uses vocabulary registry to discover which triple predicates represent aliases (e.g., `identifier.callsign`, `identifier.tail_number`).
 
 #### 4. Spatial Index
 
-**Purpose**: Geospatial queries (entities within bounding box)
+**Purpose**: Geospatial queries (entities within geographic region)
 
-**Structure**: Geohash-based indexing
+**Structure:**
 
-```
-Key: spatial:{geohash}
-Value: Set of entity IDs
+```text
+Bucket: SPATIAL_INDEX
+Key:    geo_{precision}_{latInt}_{lonInt}
+Value:  JSON object with entities map
 
 Example:
-  Key: spatial:9q8yy  # San Francisco area
-  Value: ["UAV-001", "UAV-003"]
+  Key:   geo_7_53382_12819
+  Value: {
+    "entities": {
+      "c360.platform1.robotics.gcs1.drone.1": {
+        "lat": 37.7749,
+        "lon": -122.4194,
+        "alt": 100.5,
+        "updated": 1705312200
+      }
+    },
+    "last_update": 1705312200
+  }
 ```
 
-**Query:**
-```
-Find entities near [37.7749, -122.4194] within 10km
-→ Compute geohashes for bounding box
-→ Lookup all matching geohash buckets
-→ Filter by exact distance
-```
+**Precision levels:**
 
-**Performance**: O(log N) for geohash lookup, O(M) for distance filtering
+| Precision | Resolution | Multiplier |
+|-----------|------------|------------|
+| 4 | ~2.5km | 10 |
+| 5 | ~600m | 50 |
+| 6 | ~120m | 100 |
+| 7 (default) | ~30m | 300 |
+| 8 | ~5m | 1000 |
+
+**Geohash calculation:**
+
+```go
+latInt := int(math.Floor((lat + 90.0) * multiplier))
+lonInt := int(math.Floor((lon + 180.0) * multiplier))
+key := fmt.Sprintf("geo_%d_%d_%d", precision, latInt, lonInt)
+```
 
 #### 5. Temporal Index
 
-**Purpose**: Time-based queries (entities created/updated in time range)
+**Purpose**: Time-based queries (entities active in time range)
 
-**Structure**: Time bucket indexing
+**Structure:**
 
-```
-Key: temporal:{bucket}
-Value: Set of entity IDs
+```text
+Bucket: TEMPORAL_INDEX
+Key:    YYYY.MM.DD.HH
+Value:  JSON object with events array
 
 Example:
-  Key: temporal:2024-01-15T10:00
-  Value: ["UAV-001", "UAV-002"]  # Entities active in this hour
+  Key:   2024.01.15.10
+  Value: {
+    "events": [
+      {
+        "entity": "c360.platform1.robotics.gcs1.drone.1",
+        "type": "update",
+        "timestamp": "2024-01-15T10:15:30Z"
+      },
+      {
+        "entity": "c360.platform1.robotics.gcs1.drone.2",
+        "type": "update",
+        "timestamp": "2024-01-15T10:22:45Z"
+      }
+    ],
+    "entity_count": 2
+  }
 ```
 
 **Query:**
-```
-Find entities active between 10:00-11:00
-→ Lookup temporal buckets for time range
-→ Union all entity sets
-```
 
-**Performance**: O(K) where K = number of time buckets in range
+```text
+Find entities active between 10:00-12:00 on 2024-01-15
+→ Lookup "2024.01.15.10", "2024.01.15.11" in TEMPORAL_INDEX
+→ Collect all entity IDs from events arrays
+→ Deduplicate
+```
 
 #### 6. Embedding Index (GraphRAG)
 
 **Purpose**: Semantic similarity search
 
-**Structure**: Vector database (in-memory or external)
+**Providers:**
 
-```
-Entity ID → Vector (1536 dimensions)
+- **BM25** (default): Pure Go lexical search, no external service
+- **HTTP**: External embedding service (SemEmbed, OpenAI, LocalAI)
 
-Example:
-  "UAV-001" → [0.12, -0.34, 0.56, ...]
+**Structure:**
+
+```text
+Bucket: EMBEDDING_INDEX
+Key:    {entity_id}
+Value:  {
+  "vector": [0.12, -0.34, 0.56, ...],
+  "model": "all-MiniLM-L6-v2",
+  "text_hash": "abc123...",
+  "created_at": "2024-01-15T10:30:00Z"
+}
 ```
 
-**Query:**
-```
-Find entities semantically similar to "low battery emergency"
-→ Generate query embedding
-→ Compute cosine similarity with all entity embeddings
-→ Return top K most similar
-```
+**Deduplication bucket:**
 
-**Performance**: O(N) for brute force, O(log N) with HNSW/IVF indexes
+```text
+Bucket: EMBEDDING_DEDUP
+Key:    {content_hash}
+Value:  {entity_id}
+```
 
 ### Index Update Flow
 
-```
-1. Entity created/updated in KV
-2. DataManager emits index update event
-3. IndexManager receives event
-4. For each enabled index:
-   a. Extract relevant fields from entity
+```text
+1. Entity created/updated in ENTITY_STATES
+2. IndexManager processes entity via KV watcher
+3. For each enabled index:
+   a. Extract relevant fields from EntityState
    b. Compute index keys
-   c. Batch update KV bucket
-5. If embedding enabled:
-   a. Extract text content
-   b. Send to SemEmbed service (async)
-   c. Store vector in embedding index
+   c. Update KV bucket with CAS (Compare-And-Swap)
+4. If embedding enabled:
+   a. Extract text from configured fields
+   b. Generate embedding (BM25 or HTTP)
+   c. Store in EMBEDDING_INDEX
 ```
 
-**Batch processing optimization:**
+**CAS update pattern:**
 
 ```go
-// Collect index updates
-updates := make(map[string][]KVPair)
-for _, entity := range entities {
-    // Predicate index
-    for _, edge := range entity.Edges {
-        key := fmt.Sprintf("predicate:%s", edge.Predicate)
-        updates["predicate"] = append(updates["predicate"],
-            KVPair{Key: key, Value: entity.ID})
+// Race-free index updates using Compare-And-Swap
+err := kvStore.UpdateWithRetry(ctx, key, func(current []byte) ([]byte, error) {
+    entities := parseEntityList(current)
+    if !contains(entities, entityID) {
+        entities = append(entities, entityID)
     }
-
-    // Incoming index
-    for _, edge := range entity.Edges {
-        key := fmt.Sprintf("incoming:%s:%s", edge.Target, edge.Predicate)
-        updates["incoming"] = append(updates["incoming"],
-            KVPair{Key: key, Value: entity.ID})
-    }
-}
-
-// Batch update each index bucket
-for bucket, pairs := range updates {
-    kv.PutBatch(bucket, pairs)
-}
+    return json.Marshal(entities)
+})
 ```
 
 ---
@@ -431,117 +526,100 @@ for bucket, pairs := range updates {
 
 ### Query Flow
 
-```
-1. HTTP Request → API Gateway
-2. API Gateway publishes to "graph.query.{type}"
-3. Graph Processor Querier subscribes
-4. Parse query parameters
-5. Check cache (if enabled)
-6. Cache miss → Execute query:
+```text
+1. Request arrives (NATS request/reply or HTTP)
+2. QueryManager receives query
+3. Rate limiting check (100 queries/sec default)
+4. Check cache (if enabled)
+5. Cache miss → Execute query:
    a. Determine required indexes
    b. Fetch from index KV buckets
-   c. Resolve entity IDs to full entities
+   c. Resolve entity IDs to full EntityState
    d. Apply filters and limits
-7. Cache result
-8. Return to API Gateway
-9. API Gateway returns HTTP response
+6. Cache result
+7. Return response
 ```
 
 ### Query Types
 
 #### 1. Entity by ID
 
-```json
-GET /entity/UAV-001
+```text
+GET entity by "c360.platform1.robotics.gcs1.drone.1"
 
 Query Plan:
-  → Direct KV lookup: "entity:drone:UAV-001"
+  → Direct KV lookup in ENTITY_STATES
+  → Key: "c360.platform1.robotics.gcs1.drone.1"
   → O(1) performance
 ```
 
-#### 2. Entities by Type
+#### 2. Entity by Alias
 
-```json
-GET /entities?type=drone
+```text
+GET entity by alias "rescue-alpha"
 
 Query Plan:
-  → Scan KV prefix: "entity:drone:*"
-  → O(N) where N = number of drones
-  → Cache recommended
+  → Lookup "alias--rescue-alpha" in ALIAS_INDEX
+  → Get entity ID
+  → Lookup entity in ENTITY_STATES
+  → O(1) + O(1) = O(1) performance
 ```
 
-#### 3. Relationship Traversal
+#### 3. Entities by Predicate
 
-```json
-GET /entities?predicate=belongs_to&target=fleet-rescue
+```text
+GET entities with predicate "robotics.battery.level"
 
 Query Plan:
-  → Lookup predicate index: "predicate:belongs_to"
-  → Filter by target: "fleet-rescue"
-  → Resolve entity IDs
-  → O(M) where M = entities with predicate
+  → Lookup "robotics.battery.level" in PREDICATE_INDEX
+  → Get array of entity IDs
+  → Resolve each entity from ENTITY_STATES
+  → O(1) + O(N) where N = matching entities
 ```
 
 #### 4. Reverse Relationship
 
-```json
-GET /entities?incoming=fleet-rescue&predicate=belongs_to
+```text
+GET entities pointing to "c360.platform1.robotics.fleet1.fleet.rescue"
 
 Query Plan:
-  → Lookup incoming index: "incoming:fleet-rescue:belongs_to"
-  → Resolve entity IDs
-  → O(1) index lookup, O(K) entity resolution
+  → Lookup target in INCOMING_INDEX
+  → Get array of source entity IDs
+  → Resolve each entity from ENTITY_STATES
+  → O(1) + O(N) where N = incoming entities
 ```
 
 #### 5. Semantic Search
 
-```json
+```text
 POST /search/semantic
 {"query": "low battery emergency", "limit": 10}
 
 Query Plan:
-  → Generate query embedding
-  → Compute similarity with all entity embeddings
+  → Generate query embedding (BM25 or HTTP)
+  → Compute similarity with indexed embeddings
   → Sort by score descending
-  → Return top K
-  → O(N) for N entities (no index acceleration yet)
+  → Return top K entities
+  → O(N) for N entities (brute force)
 ```
 
 ### Query Cache
 
+The QueryManager implements LRU caching with TTL:
+
 ```go
 type QueryCache struct {
-    cache     map[string]CachedResult
-    ttl       time.Duration
-    maxSize   int
-}
-
-type CachedResult struct {
-    Result    interface{}
-    Timestamp time.Time
-}
-
-func (qc *QueryCache) Get(key string) (interface{}, bool) {
-    result, exists := qc.cache[key]
-    if !exists {
-        return nil, false
-    }
-
-    // Check TTL
-    if time.Since(result.Timestamp) > qc.ttl {
-        delete(qc.cache, key)
-        return nil, false
-    }
-
-    return result.Result, true
+    cache   *lru.Cache[string, *CachedResult]
+    ttl     time.Duration
+    maxSize int
 }
 ```
 
 **Cache invalidation strategies:**
 
-- **TTL-based**: Expire after fixed time (simple, works for most cases)
-- **Event-based**: Invalidate when entities change (complex, high accuracy)
-- **Hybrid**: TTL + invalidate on writes to specific entities
+- **TTL-based**: Expire after fixed time (simple, default)
+- **Event-based**: Invalidate on entity changes via KV watcher
+- **Hybrid**: TTL + invalidate on specific entity updates
 
 ---
 
@@ -551,29 +629,29 @@ func (qc *QueryCache) Get(key string) (interface{}, bool) {
 
 **Native Semantic (Always Available):**
 
-```
+```text
 Entity text → Go algorithms (TF-IDF, BM25) → Similarity score
 ```
 
 - No external dependencies
 - Works on Raspberry Pi
-- Good enough for basic similarity
+- Good for basic similarity
 - Fast (pure Go)
 
 **Enhanced Semantic (Optional):**
 
-```
+```text
 Entity text → SemEmbed service → Transformer model → Vector embedding
 ```
 
 - Requires SemEmbed service (~2GB RAM)
-- Much higher quality similarity
+- Higher quality similarity
 - Slower (model inference)
 - GPU optional (faster with GPU)
 
 ### SemEmbed Integration
 
-```
+```text
 ┌─────────────────┐
 │ Graph Processor │
 └────────┬────────┘
@@ -589,8 +667,8 @@ Entity text → SemEmbed service → Transformer model → Vector embedding
          │ JSON response: {"embedding": [0.12, ...]}
          ▼
 ┌─────────────────┐
-│ Embedding Index │
-│ (in-memory)     │
+│ EMBEDDING_INDEX │
+│ (NATS KV)       │
 └─────────────────┘
 ```
 
@@ -601,56 +679,17 @@ Entity text → SemEmbed service → Transformer model → Vector embedding
   "indexer": {
     "embedding": {
       "enabled": true,
-      "service_url": "http://localhost:8081",
-      "batch_size": 32,
-      "timeout": "5s",
-      "fields": ["title", "description", "content"]
+      "provider": "http",
+      "http_endpoint": "http://localhost:8082",
+      "http_model": "all-MiniLM-L6-v2",
+      "text_fields": ["title", "description", "content", "summary", "text", "name"],
+      "retention_window": "24h"
     }
   }
 }
 ```
 
-**Async embedding pattern:**
-
-```go
-// Don't block entity indexing on embedding
-go func() {
-    embedding, err := embeddingClient.Embed(ctx, entity.Text)
-    if err != nil {
-        log.Error("embedding failed", "error", err)
-        return  // Continue without embedding
-    }
-    embeddingIndex.Store(entity.ID, embedding)
-}()
-```
-
-### SemSummarize Integration
-
-```
-┌─────────────────┐
-│ Graph Processor │
-└────────┬────────┘
-         │ HTTP POST /summarize
-         ▼
-┌──────────────────┐
-│ SemSummarize API │
-│ (OpenAI-compat)  │
-│ • Local LLM      │
-│ • Cloud API      │
-└────────┬─────────┘
-         │ JSON: {"summary": "..."}
-         ▼
-┌─────────────────┐
-│ Entity.summary  │
-│ (field update)  │
-└─────────────────┘
-```
-
-**Use cases:**
-
-- Summarize long entity descriptions
-- Generate entity titles from content
-- Extract key metadata from unstructured text
+**Fallback behavior:** If HTTP provider fails, system automatically falls back to BM25.
 
 ---
 
@@ -658,7 +697,7 @@ go func() {
 
 ### Edge-to-Cloud Pattern
 
-```
+```text
 ┌───────────────────────────────────────┐
 │ EDGE (Raspberry Pi, Vehicle)          │
 │ • PathRAG only (no embeddings)        │
@@ -700,23 +739,21 @@ go func() {
 }
 ```
 
-**WebSocket federation pattern:**
-
-```text
-Edge (WebSocket Output)
-  ↓ TLS connection
-Cloud (WebSocket Input)
-  ← Receives filtered events
-  → Optional: Send commands back
-```
-
 ---
 
 ## Next Steps
 
-- **[Performance Tuning](02-performance-tuning.md)** - Optimize for your workload
-- **[Production Patterns](04-production-patterns.md)** - Deployment best practices
-- **[Algorithm Reference](05-algorithm-reference.md)** - Native algorithm details
+- **[Algorithm Reference](03-algorithm-reference.md)** - Native algorithm details
+- **[Configuration Guide](04-configuration-guide.md)** - Enable/disable features based on your data
+- **[Practical Query Patterns](05-query-strategies.md)** - Apply what you've learned
+
+**Later:**
+
+- **[Performance Tuning](07-performance-tuning.md)** - Optimize for your workload
+- **[Production Patterns](08-production-patterns.md)** - Deployment best practices
+
+**Related:**
+
 - **[Graph Indexing](../graph/04-indexing.md)** - Index configuration guide
 
 ---

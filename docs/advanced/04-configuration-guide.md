@@ -1,12 +1,20 @@
-# PathRAG vs GraphRAG: Configuration Decision Guide
+# Configuration Guide
 
-**Choosing the right configuration for your data**
+**Choosing the right PathRAG and GraphRAG configuration for your data**
+
+---
+
+> **Prerequisite**: This guide assumes you understand [Query Fundamentals](01-query-fundamentals.md) - what PathRAG and GraphRAG are and when to use each.
 
 ---
 
 ## Overview
 
-SemStreams excels when you need **structured relationships (PathRAG) OR semantic search (GraphRAG) OR both** - but you don't need both for every use case. The flexibility to use only what you need is a core feature.
+SemStreams is composable - you don't need to enable every feature for every use case. The flexibility to use only what you need is a core feature:
+
+- **PathRAG only**: Minimal memory, fast queries, works on edge devices
+- **GraphRAG only**: Semantic search without explicit relationships
+- **Full stack**: Both approaches for comprehensive queries
 
 This guide helps you decide which capabilities to enable based on your data characteristics.
 
@@ -324,10 +332,14 @@ Edge (PathRAG only) → Selective sync → Cloud (Full stack)
 
 ## Next Steps
 
-- **[Native vs Enhanced Semantic](../semantic/01-overview.md)** - Understanding semantic capabilities
+- **[Query Strategies](05-query-strategies.md)** - Practical query patterns for each approach
+- **[Hybrid Queries](06-hybrid-queries.md)** - Combining PathRAG and GraphRAG
+- **[Performance Tuning](07-performance-tuning.md)** - Optimization strategies
+- **[Production Patterns](08-production-patterns.md)** - Deployment best practices
+
+**Related:**
+- **[Native vs Enhanced Semantic](../semantic/01-overview.md)** - Semantic capabilities deep dive
 - **[Graph Indexing](../graph/04-indexing.md)** - Index types and configuration
-- **[Edge Federation](../edge/03-federation.md)** - Edge-to-cloud patterns
-- **[Performance Tuning](02-performance-tuning.md)** - Optimization strategies
 
 ---
 

@@ -4,105 +4,411 @@
 
 ---
 
-## Query Methods
+## Query Interfaces
 
-- HTTP REST API
-- NATS request/reply
-- GraphQL (optional)
+SemStreams provides three query interfaces:
 
----
-
-## Entity Queries
-
-### By ID
-
-```bash
-curl "http://localhost:8080/graph/entity/UAV-001"
-```
-
-### By Type
-
-```bash
-curl "http://localhost:8080/graph/query?type=drone"
-```
-
-### By Properties
-
-```bash
-curl "http://localhost:8080/graph/query?type=drone&battery.level.lte=20"
-```
-
-**Operators:** `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`
+| Interface | Use Case | Protocol |
+|-----------|----------|----------|
+| **GraphQL** | Interactive queries, UI dashboards | HTTP (GraphQL) |
+| **NATS Request/Reply** | Programmatic access, service-to-service | NATS |
+| **Semantic Search** | Natural language queries | HTTP Gateway |
 
 ---
 
-## Relationship Queries
+## GraphQL Gateway
 
-### Forward (outgoing)
+The primary query interface. Define domain-specific schemas with typed queries.
 
-```bash
-curl "http://localhost:8080/graph/query?source=UAV-001&predicate=belongs_to"
+### Example Schema
+
+```graphql
+type Query {
+  # Single entity by ID
+  drone(id: ID!): Drone
+
+  # List queries
+  allDrones(limit: Int, status: DroneStatus): [Drone!]!
+
+  # Relationship queries
+  dronesInFleet(fleetID: ID!): [Drone!]!
+
+  # Search
+  searchDrones(query: String!, limit: Int): [Drone!]!
+}
+
+type Drone {
+  id: ID!
+  status: DroneStatus!
+  batteryLevel: Float!
+  location: Location!
+  fleet: Fleet
+  sensors: [Sensor!]
+}
 ```
 
-### Reverse (incoming)
+### Query Examples
 
-```bash
-curl "http://localhost:8080/graph/query?target=fleet-rescue&predicate=belongs_to"
+**Single entity:**
+
+```graphql
+query {
+  drone(id: "acme.telemetry.robotics.gcs1.drone.001") {
+    id
+    status
+    batteryLevel
+    fleet {
+      id
+      name
+    }
+  }
+}
+```
+
+**With filters:**
+
+```graphql
+query {
+  allDrones(status: ACTIVE, limit: 10) {
+    id
+    batteryLevel
+    location {
+      latitude
+      longitude
+    }
+  }
+}
+```
+
+**Relationship traversal:**
+
+```graphql
+query {
+  dronesInFleet(fleetID: "acme.ops.logistics.hq.fleet.rescue") {
+    id
+    status
+    batteryLevel
+  }
+}
+```
+
+### GraphQL Configuration
+
+```json
+{
+  "services": {
+    "graphql-gateway": {
+      "enabled": true,
+      "config": {
+        "schema_path": "./schemas/robotics.graphql",
+        "http_port": 8080,
+        "playground_enabled": true,
+        "queries": {
+          "drone": {
+            "resolver": "QueryEntityByID",
+            "subject": "graph.drone.get"
+          },
+          "allDrones": {
+            "resolver": "QueryEntitiesByType",
+            "entity_type": "robotics.drone"
+          }
+        }
+      }
+    }
+  }
+}
 ```
 
 ---
 
-## Advanced Queries
+## NATS Request/Reply
 
-### Multi-hop Traversal
+For programmatic access within services.
 
-```bash
-curl -X POST http://localhost:8080/graph/traverse \
-  -d '{"start":"fleet-rescue","hops":[{"predicate":"belongs_to","direction":"incoming"}]}'
+### Query by ID
+
+```go
+// Request
+request := QueryRequest{
+    EntityID: "acme.telemetry.robotics.gcs1.drone.001",
+}
+
+// Send to graph processor
+response, err := nc.Request("graph.entity.get", requestBytes, 5*time.Second)
 ```
 
-### Geospatial Queries
+### Query by Type
 
-```bash
-curl "http://localhost:8080/graph/query?lat=37.7749&lon=-122.4194&radius_km=10"
+```go
+request := QueryRequest{
+    EntityType: "robotics.drone",
+    Limit:      100,
+}
+
+response, err := nc.Request("graph.entity.query", requestBytes, 5*time.Second)
 ```
 
-Requires spatial index enabled.
+### Query by Predicate
 
-### Temporal Queries
+```go
+request := PredicateQueryRequest{
+    Predicate: "ops.fleet.member_of",
+    Object:    "acme.ops.logistics.hq.fleet.rescue",
+}
 
-```bash
-curl "http://localhost:8080/graph/query?created_after=2024-01-15T00:00:00Z"
+response, err := nc.Request("graph.predicate.query", requestBytes, 5*time.Second)
 ```
-
-Requires temporal index enabled.
 
 ---
 
 ## Semantic Search
 
-```bash
-curl -X POST http://localhost:8080/search/semantic \
-  -d '{"query":"emergency battery situation","limit":10}'
+Natural language queries via embeddings.
+
+**Requires embedding enabled:**
+
+```json
+{
+  "graph": {
+    "config": {
+      "indexer": {
+        "embedding": {
+          "enabled": true,
+          "service_url": "http://semembed:8081"
+        }
+      }
+    }
+  }
+}
 ```
 
-Requires embedding enabled.
+**Gateway endpoint:**
+
+```bash
+curl -X POST http://localhost:8080/search/semantic \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "drones with low battery in rescue fleet",
+    "limit": 10,
+    "entity_types": ["robotics.drone"]
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "results": [
+    {
+      "entity_id": "acme.telemetry.robotics.gcs1.drone.002",
+      "score": 0.92,
+      "entity": {
+        "node": {
+          "id": "acme.telemetry.robotics.gcs1.drone.002",
+          "type": "robotics.drone",
+          "properties": {
+            "robotics.battery.level": 15.4
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+See: [SemEmbed](../semantic/02-semembed.md) for embedding configuration.
+
+---
+
+## Index-Based Queries
+
+Queries leverage NATS KV indexes for performance.
+
+### PREDICATE_INDEX
+
+Query entities by predicate value:
+
+```text
+Key: "ops.fleet.member_of:acme.ops.logistics.hq.fleet.rescue"
+Value: ["drone.001", "drone.002", "drone.003"]
+```
+
+**Use case:** Find all entities with a specific predicate value.
+
+### INCOMING_INDEX
+
+Query reverse relationships (incoming edges):
+
+```text
+Key: "acme.ops.logistics.hq.fleet.rescue"
+Value: ["drone.001", "drone.002", "drone.003"]
+```
+
+**Use case:** Find all entities pointing TO this entity.
+
+**Enable incoming index:**
+
+```json
+{
+  "graph": {
+    "config": {
+      "indexer": {
+        "indexes": {
+          "incoming": true
+        }
+      }
+    }
+  }
+}
+```
+
+### SPATIAL_INDEX
+
+Query by geographic location:
+
+```json
+{
+  "graph": {
+    "config": {
+      "indexer": {
+        "indexes": {
+          "spatial": true
+        }
+      }
+    }
+  }
+}
+```
+
+### TEMPORAL_INDEX
+
+Query by time range:
+
+```json
+{
+  "graph": {
+    "config": {
+      "indexer": {
+        "indexes": {
+          "temporal": true
+        }
+      }
+    }
+  }
+}
+```
+
+See: [Indexing](04-indexing.md) for index configuration details.
+
+---
+
+## PathRAG Traversal
+
+Multi-hop relationship traversal.
+
+**Example:** Find sensors on drones in a fleet (2 hops)
+
+```text
+fleet.rescue ←member_of← drone.001 →has_component→ sensor.42
+```
+
+**GraphQL:**
+
+```graphql
+query {
+  fleet(id: "acme.ops.logistics.hq.fleet.rescue") {
+    drones {
+      id
+      sensors {
+        id
+        type
+        lastReading {
+          value
+          timestamp
+        }
+      }
+    }
+  }
+}
+```
+
+See: [Query Fundamentals](../advanced/01-query-fundamentals.md) for PathRAG vs GraphRAG decisions.
 
 ---
 
 ## Query Performance
 
-- Enable caching for read-heavy workloads
-- Use specific filters to narrow search space
-- Limit result sets
-- Enable appropriate indexes
+### Use Indexes
 
-See [Performance Tuning](../advanced/02-performance-tuning.md).
+Enable appropriate indexes for your query patterns:
+
+```json
+{
+  "indexer": {
+    "indexes": {
+      "predicate": true,    // For predicate-based queries
+      "incoming": true,     // For reverse relationship queries
+      "spatial": true,      // For geo queries
+      "temporal": true      // For time-range queries
+    }
+  }
+}
+```
+
+### Limit Results
+
+Always specify limits to avoid unbounded queries:
+
+```graphql
+query {
+  allDrones(limit: 100) {
+    id
+  }
+}
+```
+
+### Use Specific Predicates
+
+Query specific predicates rather than scanning all entities:
+
+```go
+// Good: Query by predicate
+request := PredicateQueryRequest{
+    Predicate: "ops.fleet.member_of",
+    Object:    fleetID,
+}
+
+// Avoid: Scan all entities and filter
+```
+
+### Cache Considerations
+
+Query results are not cached by default. Enable caching for read-heavy workloads:
+
+```json
+{
+  "graph": {
+    "config": {
+      "query_cache": {
+        "enabled": true,
+        "ttl": "30s",
+        "max_entries": 10000
+      }
+    }
+  }
+}
+```
+
+See: [Performance Tuning](../advanced/07-performance-tuning.md) for optimization details.
 
 ---
 
 ## Next Steps
 
 - **[Indexing](04-indexing.md)** - Configure indexes for query performance
-- **[Performance Tuning](../advanced/02-performance-tuning.md)** - Optimize queries
-- **[PathRAG Decisions](../advanced/01-pathrag-graphrag-decisions.md)** - Query patterns guide
+- **[Query Fundamentals](../advanced/01-query-fundamentals.md)** - PathRAG vs GraphRAG decisions
+- **[Performance Tuning](../advanced/07-performance-tuning.md)** - Optimize queries
+
+---
+
+**Key Takeaway:** Use GraphQL for interactive queries, NATS for programmatic access, and semantic search for natural language. Enable appropriate indexes for your query patterns.

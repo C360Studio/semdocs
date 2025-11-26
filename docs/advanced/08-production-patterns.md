@@ -819,12 +819,17 @@ systemctl restart semstreams
 
 ---
 
-## Next Steps
+## Reference
 
-- **[Performance Tuning](02-performance-tuning.md)** - Optimize your deployment
-- **[Architecture Deep Dive](03-architecture-deep-dive.md)** - Understand internals
-- **[PathRAG vs GraphRAG Decisions](01-pathrag-graphrag-decisions.md)** - Configuration guidance
-- **[Algorithm Reference](05-algorithm-reference.md)** - Native algorithm details
+This is the final document in the advanced series. For reference:
+
+- **[Query Fundamentals](01-query-fundamentals.md)** - PathRAG and GraphRAG concepts
+- **[Architecture Deep Dive](02-architecture-deep-dive.md)** - System internals
+- **[Algorithm Reference](03-algorithm-reference.md)** - Native algorithm details
+- **[Configuration Guide](04-configuration-guide.md)** - Enable/disable features
+- **[Practical Query Patterns](05-query-strategies.md)** - Query examples
+- **[Hybrid Queries](06-hybrid-queries.md)** - Combined query patterns
+- **[Performance Tuning](07-performance-tuning.md)** - Optimization strategies
 
 ---
 

@@ -571,9 +571,13 @@ The following algorithms are **not currently implemented** in SemStreams:
 
 ## Next Steps
 
-- **[Performance Tuning](02-performance-tuning.md)** - Optimize algorithm parameters
-- **[Architecture Deep Dive](03-architecture-deep-dive.md)** - How algorithms integrate
-- **[PathRAG vs GraphRAG Decisions](01-pathrag-graphrag-decisions.md)** - When to use native vs enhanced
+- **[Configuration Guide](04-configuration-guide.md)** - Enable/disable features based on your data
+- **[Practical Query Patterns](05-query-strategies.md)** - Apply algorithms in queries
+- **[Performance Tuning](07-performance-tuning.md)** - Optimize algorithm parameters
+
+**Reference:**
+- **[Query Fundamentals](01-query-fundamentals.md)** - PathRAG and GraphRAG concepts
+- **[Architecture Deep Dive](02-architecture-deep-dive.md)** - How algorithms integrate
 
 ---
 

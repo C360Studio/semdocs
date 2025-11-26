@@ -205,7 +205,7 @@ Add these by extending the examples:
 - TLS/certificates
 - Monitoring dashboards (Grafana, etc.)
 
-See [Production Patterns](../advanced/04-production-patterns.md) and [Deployment Guides](../deployment/) for these features.
+See [Production Patterns](../advanced/08-production-patterns.md) and [Deployment Guides](../deployment/) for these features.
 
 ---
 

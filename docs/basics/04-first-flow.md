@@ -2,7 +2,7 @@
 
 **Hands-on tutorial: Build a complete event flow that automatically creates a graph**
 
-> **Quick Start Alternative:** Want to run SemStreams immediately with Docker? See [Examples](07-examples.md) for ready-to-run Docker Compose configurations. The [Quickstart Example](../../examples/quickstart/) gets you running in 30 seconds with minimal configuration.
+> **Quick Start Alternative:** Want to run SemStreams immediately with Docker? See [Examples](08-examples.md) for ready-to-run Docker Compose configurations. The [Quickstart Example](../../examples/quickstart/) gets you running in 30 seconds with minimal configuration.
 
 ---
 
@@ -236,11 +236,12 @@ Create `send-telemetry.sh`:
 ```bash
 #!/bin/bash
 
-# Send drone telemetry
-echo '{"entity_id":"UAV-001","entity_type":"drone","fleet":"rescue","battery":{"level":85.2},"status":"active"}' | nc -u localhost 14550
-echo '{"entity_id":"UAV-002","entity_type":"drone","fleet":"rescue","battery":{"level":15.4},"status":"critical"}' | nc -u localhost 14550
-echo '{"entity_id":"UAV-003","entity_type":"drone","fleet":"rescue","battery":{"level":92.1},"status":"active"}' | nc -u localhost 14550
-echo '{"entity_id":"fleet-rescue","entity_type":"fleet","status":"active","location":"base-west"}' | nc -u localhost 14550
+# Send drone telemetry with 6-part federated entity IDs
+# Format: org.platform.domain.system.type.instance
+echo '{"entity_id":"tutorial.first-flow.robotics.gcs1.drone.001","entity_type":"robotics.drone","fleet":"rescue","battery":{"level":85.2},"status":"active"}' | nc -u localhost 14550
+echo '{"entity_id":"tutorial.first-flow.robotics.gcs1.drone.002","entity_type":"robotics.drone","fleet":"rescue","battery":{"level":15.4},"status":"critical"}' | nc -u localhost 14550
+echo '{"entity_id":"tutorial.first-flow.robotics.gcs1.drone.003","entity_type":"robotics.drone","fleet":"rescue","battery":{"level":92.1},"status":"active"}' | nc -u localhost 14550
+echo '{"entity_id":"tutorial.first-flow.ops.hq.fleet.rescue","entity_type":"ops.fleet","status":"active","location":"base-west"}' | nc -u localhost 14550
 ```
 
 Run it:
@@ -259,7 +260,7 @@ chmod +x send-telemetry.sh
 ```text
 INFO [UDP] Received 4 messages
 INFO [JSON Generic] Parsed 4 messages
-INFO [JSON Filter] Filtered: 1 low battery alert (UAV-002)
+INFO [JSON Filter] Filtered: 1 low battery alert (tutorial.first-flow.robotics.gcs1.drone.002)
 INFO [Entity Converter] Created 4 entities
 INFO [Graph] Indexed 4 entities
 INFO [File] Wrote 1 alert to /tmp/alerts-20240115.jsonl
@@ -274,7 +275,7 @@ cat /tmp/alerts-*.jsonl
 **Output:**
 
 ```json
-{"entity_id":"UAV-002","entity_type":"drone","fleet":"rescue","battery":{"level":15.4},"status":"critical"}
+{"entity_id":"tutorial.first-flow.robotics.gcs1.drone.002","entity_type":"robotics.drone","fleet":"rescue","battery":{"level":15.4},"status":"critical"}
 ```
 
 ---
@@ -296,7 +297,7 @@ curl http://localhost:8080/health
 ### Graph Statistics
 
 ```bash
-curl http://localhost:8080/graph/stats
+curl http://localhost:8080/api/v1/graph/stats
 ```
 
 **Response:**
@@ -305,8 +306,8 @@ curl http://localhost:8080/graph/stats
 {
   "entity_count": 4,
   "entity_types": {
-    "drone": 3,
-    "fleet": 1
+    "robotics.drone": 3,
+    "ops.fleet": 1
   },
   "relationship_count": 3
 }
@@ -315,7 +316,7 @@ curl http://localhost:8080/graph/stats
 ### Find All Drones
 
 ```bash
-curl "http://localhost:8080/graph/query?type=drone"
+curl "http://localhost:8080/api/v1/graph/query?type=robotics.drone"
 ```
 
 **Response:**
@@ -324,28 +325,28 @@ curl "http://localhost:8080/graph/query?type=drone"
 {
   "entities": [
     {
-      "id": "UAV-001",
-      "type": "drone",
+      "id": "tutorial.first-flow.robotics.gcs1.drone.001",
+      "type": "robotics.drone",
       "properties": {"fleet": "rescue", "battery": {"level": 85.2}, "status": "active"}
     },
     {
-      "id": "UAV-002",
-      "type": "drone",
+      "id": "tutorial.first-flow.robotics.gcs1.drone.002",
+      "type": "robotics.drone",
       "properties": {"fleet": "rescue", "battery": {"level": 15.4}, "status": "critical"}
     },
     {
-      "id": "UAV-003",
-      "type": "drone",
+      "id": "tutorial.first-flow.robotics.gcs1.drone.003",
+      "type": "robotics.drone",
       "properties": {"fleet": "rescue", "battery": {"level": 92.1}, "status": "active"}
     }
   ]
 }
 ```
 
-### Find Drones in Rescue Fleet
+### Find Drones in Rescue Fleet (PathRAG Traversal)
 
 ```bash
-curl "http://localhost:8080/graph/query?predicate=belongs_to&target=fleet-rescue"
+curl "http://localhost:8080/api/v1/graph/traverse?start=tutorial.first-flow.ops.hq.fleet.rescue&direction=incoming"
 ```
 
 **Response:**
@@ -353,9 +354,9 @@ curl "http://localhost:8080/graph/query?predicate=belongs_to&target=fleet-rescue
 ```json
 {
   "entities": [
-    {"id": "UAV-001", "type": "drone", ...},
-    {"id": "UAV-002", "type": "drone", ...},
-    {"id": "UAV-003", "type": "drone", ...}
+    {"id": "tutorial.first-flow.robotics.gcs1.drone.001", "type": "robotics.drone", ...},
+    {"id": "tutorial.first-flow.robotics.gcs1.drone.002", "type": "robotics.drone", ...},
+    {"id": "tutorial.first-flow.robotics.gcs1.drone.003", "type": "robotics.drone", ...}
   ]
 }
 ```
@@ -363,7 +364,7 @@ curl "http://localhost:8080/graph/query?predicate=belongs_to&target=fleet-rescue
 ### Find Low Battery Drones
 
 ```bash
-curl "http://localhost:8080/graph/query?type=drone&battery.level.lte=20"
+curl "http://localhost:8080/api/v1/graph/query?type=robotics.drone&battery.level.lte=20"
 ```
 
 **Response:**
@@ -371,7 +372,7 @@ curl "http://localhost:8080/graph/query?type=drone&battery.level.lte=20"
 ```json
 {
   "entities": [
-    {"id": "UAV-002", "type": "drone", "properties": {"battery": {"level": 15.4}, ...}}
+    {"id": "tutorial.first-flow.robotics.gcs1.drone.002", "type": "robotics.drone", "properties": {"battery": {"level": 15.4}, ...}}
   ]
 }
 ```
@@ -386,34 +387,34 @@ curl "http://localhost:8080/graph/query?type=drone&battery.level.lte=20"
 1. UDP Input received 4 JSON messages
 2. JSON Generic parsed them
 3. JSON Filter identified 1 low battery alert (battery ≤ 20%)
-4. JSON to Entity converted all 4 to graph entities
+4. JSON to Entity converted all 4 to EntityPayload (implements Graphable interface)
 5. Graph Processor:
-   - Stored entities in NATS KV
-   - Built predicate index (belongs_to → fleet relationships)
-   - Built incoming index (fleet-rescue ← drones)
+   - Stored entities in ENTITY_STATES KV bucket
+   - Built PREDICATE_INDEX (belongs_to → fleet relationships)
+   - Built INCOMING_INDEX (fleet.rescue ← drones)
 6. File Output wrote 1 alert to disk
 ```
 
 **Graph automatically created:**
 
 ```text
-Entities:
-  UAV-001 (drone)
-  UAV-002 (drone)
-  UAV-003 (drone)
-  fleet-rescue (fleet)
+Entities (6-part federated IDs):
+  tutorial.first-flow.robotics.gcs1.drone.001 (robotics.drone)
+  tutorial.first-flow.robotics.gcs1.drone.002 (robotics.drone)
+  tutorial.first-flow.robotics.gcs1.drone.003 (robotics.drone)
+  tutorial.first-flow.ops.hq.fleet.rescue (ops.fleet)
 
-Relationships (inferred from "fleet" property):
-  UAV-001 → belongs_to → fleet-rescue
-  UAV-002 → belongs_to → fleet-rescue
-  UAV-003 → belongs_to → fleet-rescue
+Relationships (from Graphable.Triples()):
+  drone.001 → belongs_to → fleet.rescue
+  drone.002 → belongs_to → fleet.rescue
+  drone.003 → belongs_to → fleet.rescue
 
-Indexes:
-  predicate:belongs_to → [UAV-001, UAV-002, UAV-003]
-  incoming:fleet-rescue:belongs_to → [UAV-001, UAV-002, UAV-003]
+Indexes (NATS KV buckets):
+  PREDICATE_INDEX: "belongs_to" → [drone.001, drone.002, drone.003]
+  INCOMING_INDEX: "fleet.rescue" ← [drone.001, drone.002, drone.003]
 ```
 
-You didn't manually create the graph - it built itself from your events.
+You didn't manually create the graph - it built itself from your events via the **Graphable interface**.
 
 ---
 
@@ -576,7 +577,7 @@ cp config.example.json config.json
 docker compose up -d
 ```
 
-**See:** [Examples Guide](07-examples.md) for detailed comparison and usage
+**See:** [Examples Guide](08-examples.md) for detailed comparison and usage
 
 ---
 
@@ -585,7 +586,7 @@ docker compose up -d
 - **[Components](02-components.md)** - Learn all component types
 - **[Routing](03-routing.md)** - Advanced routing patterns
 - **[Graph Queries](../graph/03-queries.md)** - Query the graph in detail
-- **[PathRAG vs GraphRAG](../advanced/01-pathrag-graphrag-decisions.md)** - Choose your configuration
+- **[Query Fundamentals](../advanced/01-query-fundamentals.md)** - PathRAG vs GraphRAG decisions
 
 ---
 

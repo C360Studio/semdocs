@@ -161,38 +161,59 @@ func (t *TemperaturePayload) UnmarshalJSON(data []byte) error {
 }
 ```
 
-### Step 3: Implement Optional Behavioral Interfaces
+### Step 3: Implement Graphable (Required for Graph Storage)
 
-Add capabilities that make sense for your payload:
+If your payload represents entities that should be stored in the knowledge graph, you **must** implement the `Graphable` interface:
 
 ```go
-// Timeable - Enables time-series indexing
-func (t *TemperaturePayload) Timestamp() time.Time {
-    return t.Timestamp
+// Graphable - REQUIRED for graph storage
+func (t *TemperaturePayload) EntityID() string {
+    // Return deterministic 6-part federated ID
+    return fmt.Sprintf("acme.platform1.sensors.iot.temperature.%s", t.SensorID)
 }
 
-// Locatable - Enables spatial indexing
-func (t *TemperaturePayload) Location() (float64, float64) {
-    return t.Location.Lat, t.Location.Lon
-}
-
-// Observable - Enables sensor reading processing
-func (t *TemperaturePayload) ObservedEntity() string {
-    return t.SensorID
-}
-
-func (t *TemperaturePayload) ObservedProperty() string {
-    return "temperature"
-}
-
-func (t *TemperaturePayload) ObservedValue() any {
-    return t.Temperature
-}
-
-func (t *TemperaturePayload) ObservedUnit() string {
-    return t.Unit
+func (t *TemperaturePayload) Triples() []message.Triple {
+    entityID := t.EntityID()
+    return []message.Triple{
+        {
+            Subject:    entityID,
+            Predicate:  "rdf:type",
+            Object:     "sensors:TemperatureSensor",
+            Source:     "system",
+            Timestamp:  t.Timestamp,
+            Confidence: 1.0,
+        },
+        {
+            Subject:    entityID,
+            Predicate:  "sensor.temperature.value",
+            Object:     t.Temperature,
+            Source:     "sensor_reading",
+            Timestamp:  t.Timestamp,
+            Confidence: 1.0,  // Direct sensor data
+        },
+        {
+            Subject:    entityID,
+            Predicate:  "sensor.temperature.unit",
+            Object:     t.Unit,
+            Source:     "sensor_config",
+            Timestamp:  t.Timestamp,
+            Confidence: 1.0,
+        },
+    }
 }
 ```
+
+**Triple metadata fields:**
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| `Source` | Provenance tracking | `"mavlink"`, `"operator"`, `"ai_inference"` |
+| `Timestamp` | When assertion was made | `time.Now()` |
+| `Confidence` | Reliability (0.0-1.0) | `1.0` for direct data, `0.5` for inferred |
+| `Context` | Correlation ID (optional) | Batch ID, request ID |
+| `Datatype` | RDF datatype hint (optional) | `"xsd:float"`, `"geo:point"` |
+
+**Without Graphable, your payload cannot be stored in the graph.** The graph processor only accepts payloads that implement this interface.
 
 ### Step 4: Create Messages
 
@@ -219,423 +240,30 @@ msg := message.NewBaseMessage(
     "temperature-monitor",  // Source service
 )
 
-// Validate before sending
+// Validate before use
 if err := msg.Validate(); err != nil {
     log.Fatalf("Invalid message: %v", err)
 }
 
-// Publish to NATS
-subject := msg.Type().Key()  // "sensors.temperature.v1"
-data, _ := json.Marshal(msg)
-nc.Publish(subject, data)
 ```
 
-## Behavioral Interfaces
+## Interfaces as Contracts
 
-### Graphable - Entity Graph Storage
+SemStreams uses Go interfaces as data contracts. This is standard Go practice - implement the interfaces you need, and the system discovers capabilities at runtime via type assertions.
 
-**Use when:** Payload represents entities that should be stored in the knowledge graph.
+The two core interfaces are:
 
-```go
-type Graphable interface {
-    EntityID() string      // Federated entity identifier
-    Triples() []Triple    // Semantic facts about the entity
-}
-```
+| Interface | Purpose | Required For |
+|-----------|---------|--------------|
+| `Payload` | Message transport | All messages |
+| `Graphable` | Graph storage | Storing entities in the knowledge graph |
 
-**Example:**
+Additional interfaces can be defined as needed for specific processing requirements. Components discover capabilities via type assertions:
 
 ```go
-func (t *TemperaturePayload) EntityID() string {
-    return message.EntityID{
-        Org:      "acme",
-        Platform: "platform1",
-        Domain:   "sensors",
-        System:   "iot",
-        Type:     "temperature",
-        Instance: t.SensorID,
-    }.Key()  // "acme.platform1.sensors.iot.temperature.temp-sensor-001"
+if graphable, ok := payload.(message.Graphable); ok {
+    // Process as graph entity
 }
-
-func (t *TemperaturePayload) Triples() []message.Triple {
-    return []message.Triple{
-        {
-            Subject:   t.EntityID(),
-            Predicate: "sosa:hasValue",
-            Object:    t.Temperature,
-        },
-        {
-            Subject:   t.EntityID(),
-            Predicate: "sosa:hasUnit",
-            Object:    t.Unit,
-        },
-        {
-            Subject:   t.EntityID(),
-            Predicate: "sosa:resultTime",
-            Object:    t.Timestamp,
-        },
-    }
-}
-```
-
-### Locatable - Spatial Indexing
-
-**Use when:** Payload has geographic location data.
-
-```go
-type Locatable interface {
-    Location() (lat, lon float64)
-}
-```
-
-**Example:**
-
-```go
-func (t *TemperaturePayload) Location() (float64, float64) {
-    return t.Location.Lat, t.Location.Lon
-}
-```
-
-**Enables:**
-
-- Spatial queries ("Find all sensors within 10km")
-- Geographic clustering
-- Location-based routing
-
-### Timeable - Time-Series Analysis
-
-**Use when:** Payload represents time-series data or historical events.
-
-```go
-type Timeable interface {
-    Timestamp() time.Time
-}
-```
-
-**Note:** This is the event/observation time, not message creation time.
-
-**Example:**
-
-```go
-func (t *TemperaturePayload) Timestamp() time.Time {
-    return t.Timestamp
-}
-```
-
-**Enables:**
-
-- Time-series indexing
-- Temporal queries
-- Historical analysis
-
-### Observable - Sensor Readings
-
-**Use when:** Payload is a sensor reading or observation.
-
-```go
-type Observable interface {
-    ObservedEntity() string  // ID of observed entity
-    ObservedProperty() string // Property being observed
-    ObservedValue() any      // Observed value
-    ObservedUnit() string    // Measurement unit
-}
-```
-
-**Example:**
-
-```go
-func (t *TemperaturePayload) ObservedEntity() string {
-    return t.SensorID
-}
-
-func (t *TemperaturePayload) ObservedProperty() string {
-    return "temperature"
-}
-
-func (t *TemperaturePayload) ObservedValue() any {
-    return t.Temperature
-}
-
-func (t *TemperaturePayload) ObservedUnit() string {
-    return t.Unit
-}
-```
-
-### Correlatable - Distributed Tracing
-
-**Use when:** Messages need to be correlated across requests/responses.
-
-```go
-type Correlatable interface {
-    CorrelationID() string
-}
-```
-
-**Example:**
-
-```go
-type RequestPayload struct {
-    // ... fields ...
-    CorrelationID string `json:"correlation_id"`
-}
-
-func (r *RequestPayload) CorrelationID() string {
-    return r.CorrelationID
-}
-```
-
-### Processable - Priority & Deadlines
-
-**Use when:** Messages need priority-based or deadline-aware processing.
-
-```go
-type Processable interface {
-    Priority() int          // 0-10, higher = more important
-    Deadline() time.Time    // Processing deadline
-}
-```
-
-**Example:**
-
-```go
-type AlertPayload struct {
-    // ... fields ...
-    Severity  string    `json:"severity"`
-    ExpiresAt time.Time `json:"expires_at"`
-}
-
-func (a *AlertPayload) Priority() int {
-    switch a.Severity {
-    case "critical":
-        return 10
-    case "high":
-        return 7
-    case "medium":
-        return 5
-    default:
-        return 3
-    }
-}
-
-func (a *AlertPayload) Deadline() time.Time {
-    return a.ExpiresAt
-}
-```
-
-## Processing Messages
-
-### Basic Message Handling
-
-```go
-func messageHandler(m *nats.Msg) {
-    // Deserialize message
-    var msg message.BaseMessage
-    if err := json.Unmarshal(m.Data, &msg); err != nil {
-        log.Printf("Failed to unmarshal message: %v", err)
-        return
-    }
-
-    // Validate
-    if err := msg.Validate(); err != nil {
-        log.Printf("Invalid message: %v", err)
-        return
-    }
-
-    // Process based on type
-    switch msg.Type().Domain {
-    case "sensors":
-        processSensorMessage(&msg)
-    case "alerts":
-        processAlertMessage(&msg)
-    default:
-        log.Printf("Unknown domain: %s", msg.Type().Domain)
-    }
-}
-```
-
-### Capability Discovery
-
-```go
-func processSensorMessage(msg *message.BaseMessage) {
-    payload := msg.Payload()
-
-    // Check for graph storage capability
-    if graphable, ok := payload.(message.Graphable); ok {
-        entityID := graphable.EntityID()
-        triples := graphable.Triples()
-        // Store in knowledge graph
-        storeEntity(entityID, triples)
-    }
-
-    // Check for spatial capability
-    if locatable, ok := payload.(message.Locatable); ok {
-        lat, lon := locatable.Location()
-        // Build spatial index
-        spatialIndex.Add(msg.ID(), lat, lon)
-    }
-
-    // Check for time-series capability
-    if timeable, ok := payload.(message.Timeable); ok {
-        timestamp := timeable.Timestamp()
-        // Index by time
-        timeSeriesDB.Store(timestamp, payload)
-    }
-
-    // Check for observation capability
-    if observable, ok := payload.(message.Observable); ok {
-        entity := observable.ObservedEntity()
-        property := observable.ObservedProperty()
-        value := observable.ObservedValue()
-        unit := observable.ObservedUnit()
-        // Process sensor reading
-        processSensorReading(entity, property, value, unit)
-    }
-}
-```
-
-## Type System
-
-### Message Type (Schema)
-
-**Format:** `domain.category.version`
-
-```go
-Type{
-    Domain:   "sensors",      // Organizational domain
-    Category: "temperature",  // Specific message type
-    Version:  "v1",          // Schema version
-}
-```
-
-**Use for:**
-
-- NATS routing (`sensors.temperature.v1`)
-- Schema validation
-- Version evolution
-
-### Entity Type (Graph Classification)
-
-**Format:** `domain.type`
-
-```go
-EntityType{
-    Domain: "robotics",
-    Type:   "drone",
-}
-```
-
-**Use for:**
-
-- Graph queries ("Find all `robotics.drone` entities")
-- Entity classification
-- Derived from EntityID
-
-### Entity ID (Federated Identity)
-
-**Format:** `org.platform.domain.system.type.instance`
-
-```go
-EntityID{
-    Org:      "acme",
-    Platform: "platform1",
-    Domain:   "robotics",
-    System:   "mav",
-    Type:     "drone",
-    Instance: "001",
-}.Key()  // "acme.platform1.robotics.mav.drone.001"
-```
-
-**Use for:**
-
-- Globally unique entity identity
-- Multi-platform deployments
-- Federated knowledge graphs
-
-## Best Practices
-
-### 1. Implement Required Methods First
-
-```go
-// ✅ GOOD: All required methods implemented
-func (t *TemperaturePayload) Schema() message.Type { /* ... */ }
-func (t *TemperaturePayload) Validate() error { /* ... */ }
-func (t *TemperaturePayload) MarshalJSON() ([]byte, error) { /* ... */ }
-func (t *TemperaturePayload) UnmarshalJSON([]byte) error { /* ... */ }
-```
-
-### 2. Only Implement Relevant Behavioral Interfaces
-
-```go
-// ✅ GOOD: Implements Locatable because it has real GPS data
-func (d *DronePayload) Location() (float64, float64) {
-    return d.GPS.Lat, d.GPS.Lon
-}
-
-// ❌ BAD: Implements Locatable with fake data
-func (u *UserPayload) Location() (float64, float64) {
-    return 0, 0  // User has no location!
-}
-```
-
-### 3. Validate Meaningfully
-
-```go
-// ✅ GOOD: Validates business rules
-func (t *TemperaturePayload) Validate() error {
-    if t.SensorID == "" {
-        return errors.New("sensor_id is required")
-    }
-    if t.Temperature < -273.15 {
-        return errors.New("temperature below absolute zero")
-    }
-    if t.Unit == "" {
-        return errors.New("unit is required")
-    }
-    return nil
-}
-
-// ❌ BAD: No validation
-func (t *TemperaturePayload) Validate() error {
-    return nil
-}
-```
-
-### 4. Use Type Constants
-
-```go
-// ✅ GOOD: Type as constant
-var TemperatureType = message.Type{
-    Domain:   "sensors",
-    Category: "temperature",
-    Version:  "v1",
-}
-
-func (t *TemperaturePayload) Schema() message.Type {
-    return TemperatureType
-}
-
-// ❌ BAD: Inline construction
-func (t *TemperaturePayload) Schema() message.Type {
-    return message.Type{
-        Domain: "sensors", Category: "temperature", Version: "v1",
-    }
-}
-```
-
-### 5. Always Check Validation Errors
-
-```go
-// ✅ GOOD: Validate before processing
-msg := message.NewBaseMessage(payload.Schema(), payload, "my-service")
-if err := msg.Validate(); err != nil {
-    log.Printf("Invalid message: %v", err)
-    return
-}
-processMessage(msg)
-
-// ❌ BAD: Skip validation
-msg := message.NewBaseMessage(payload.Schema(), payload, "my-service")
-processMessage(msg)  // May process invalid data!
 ```
 
 ## Complete Example
@@ -646,7 +274,9 @@ package sensors
 import (
     "encoding/json"
     "errors"
+    "fmt"
     "time"
+
     "github.com/c360/semstreams/message"
 )
 
@@ -662,14 +292,17 @@ type TemperaturePayload struct {
     } `json:"location"`
 }
 
-// Type constant
+// Type definition
 var TemperatureType = message.Type{
     Domain:   "sensors",
     Category: "temperature",
     Version:  "v1",
 }
 
-// Required: Payload interface
+// ===========================================
+// Required: Payload interface (for transport)
+// ===========================================
+
 func (t *TemperaturePayload) Schema() message.Type {
     return TemperatureType
 }
@@ -694,45 +327,75 @@ func (t *TemperaturePayload) UnmarshalJSON(data []byte) error {
     return json.Unmarshal(data, (*Alias)(t))
 }
 
-// Optional: Behavioral interfaces
-func (t *TemperaturePayload) Timestamp() time.Time {
-    return t.Timestamp
+// ===========================================
+// Required: Graphable interface (for graph storage)
+// ===========================================
+
+func (t *TemperaturePayload) EntityID() string {
+    // 6-part federated format: org.platform.domain.system.type.instance
+    return fmt.Sprintf("acme.platform1.sensors.iot.temperature.%s", t.SensorID)
 }
 
-func (t *TemperaturePayload) Location() (float64, float64) {
-    return t.Location.Lat, t.Location.Lon
+func (t *TemperaturePayload) Triples() []message.Triple {
+    entityID := t.EntityID()
+    return []message.Triple{
+        {
+            Subject:    entityID,
+            Predicate:  "rdf:type",
+            Object:     "sensors:TemperatureSensor",
+            Source:     "system",
+            Timestamp:  t.Timestamp,
+            Confidence: 1.0,
+        },
+        {
+            Subject:    entityID,
+            Predicate:  "sensor.temperature.value",
+            Object:     t.Temperature,
+            Source:     "sensor_reading",
+            Timestamp:  t.Timestamp,
+            Confidence: 1.0,
+        },
+        {
+            Subject:    entityID,
+            Predicate:  "sensor.temperature.unit",
+            Object:     t.Unit,
+            Source:     "sensor_config",
+            Timestamp:  t.Timestamp,
+            Confidence: 1.0,
+        },
+        {
+            Subject:    entityID,
+            Predicate:  "geo.location.latitude",
+            Object:     t.Location.Lat,
+            Source:     "gps",
+            Timestamp:  t.Timestamp,
+            Confidence: 0.95,  // GPS accuracy varies
+        },
+        {
+            Subject:    entityID,
+            Predicate:  "geo.location.longitude",
+            Object:     t.Location.Lon,
+            Source:     "gps",
+            Timestamp:  t.Timestamp,
+            Confidence: 0.95,
+        },
+    }
 }
 
-func (t *TemperaturePayload) ObservedEntity() string {
-    return t.SensorID
-}
-
-func (t *TemperaturePayload) ObservedProperty() string {
-    return "temperature"
-}
-
-func (t *TemperaturePayload) ObservedValue() any {
-    return t.Temperature
-}
-
-func (t *TemperaturePayload) ObservedUnit() string {
-    return t.Unit
-}
 ```
 
 ## Next Steps
 
-- **Component Development**: See how to use messages in [Component Guide](components.md)
-- **Flow Configuration**: Learn how to route messages in flows
-- **Graph Storage**: Understand how `Graphable` payloads become entities
-- **Spatial Indexing**: Use `Locatable` for geographic queries
+- **[Components](02-components.md)** - See how to use messages in components
+- **[Routing](03-routing.md)** - Learn how to route messages in flows
+- **[Vocabulary Registry](06-vocabulary-registry.md)** - Define predicates for your triples
+- **[Rules Engine](07-rules-engine.md)** - React to entity changes
 
 ---
 
 **Key Takeaways:**
 
-- ✅ Messages are typed, validated containers
-- ✅ Behavioral interfaces enable runtime capability discovery
-- ✅ Type system enables routing and schema evolution
-- ✅ Only implement behavioral interfaces that make semantic sense
+- ✅ **Payload interface** is required for message transport
+- ✅ **Graphable interface** is required for graph storage
+- ✅ SemStreams uses interfaces as contracts - standard Go practice
 - ✅ Always validate messages before processing

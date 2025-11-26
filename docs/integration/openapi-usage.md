@@ -35,6 +35,7 @@ Discover available component types, their configuration schemas, and build flows
 **Generated From:** Component schema tags via `task schema:generate`
 
 **Contains:**
+
 - Component type metadata
 - Configuration schemas (JSON Schema Draft-07)
 - Component discovery endpoints
@@ -57,6 +58,7 @@ curl http://localhost:8080/components/types
 ```
 
 **Response:**
+
 ```json
 [
   {
@@ -93,6 +95,7 @@ curl http://localhost:8080/components/types/udp
 ```
 
 **Response:**
+
 ```json
 {
   "id": "udp",
@@ -131,6 +134,7 @@ npx openapi-typescript ../semstreams/specs/openapi.v3.yaml \
 ```
 
 **Generated Types:**
+
 ```typescript
 export interface components {
   schemas: {
