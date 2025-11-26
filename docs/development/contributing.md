@@ -29,9 +29,9 @@ SemStreams uses **specialized AI agents** to coordinate development work. See [A
 
 ```bash
 # Clone repositories
-git clone https://github.com/c360/semstreams
-git clone https://github.com/c360/semstreams-ui
-git clone https://github.com/c360/semembed
+git clone https://github.com/C360Studio/semstreams
+git clone https://github.com/C360Studio/semstreams-ui
+git clone https://github.com/C360Studio/semembed
 
 # Start dependencies (NATS, etc.)
 cd semstreams
@@ -96,7 +96,7 @@ See individual repo CONTRIBUTING.md for more details.
 <button onclick={() => handleClick()}>Click me</button>
 ```
 
-See [semstreams-ui/CONTRIBUTING.md](https://github.com/c360/semstreams-ui/blob/main/CONTRIBUTING.md).
+See [semstreams-ui/CONTRIBUTING.md](https://github.com/C360Studio/semstreams-ui/blob/main/CONTRIBUTING.md).
 
 ### Rust (semembed, semsummarize)
 
@@ -205,8 +205,8 @@ See [Agent Workflow](./agents.md) for the full process.
 
 ## Questions?
 
-- **General questions**: [Discussions](https://github.com/c360/semstreams/discussions)
+- **General questions**: [Discussions](https://github.com/C360Studio/semstreams/discussions)
 - **Bug reports**: Service-specific issue tracker
-- **Documentation**: [semdocs issues](https://github.com/c360/semdocs/issues)
+- **Documentation**: [semdocs issues](https://github.com/C360Studio/semdocs/issues)
 
 Thank you for contributing to SemStreams!

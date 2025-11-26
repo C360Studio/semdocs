@@ -641,7 +641,7 @@ Or use GraphQL Playground for interactive exploration: http://localhost:8080/gra
 
 ## Reference Implementations
 
-- **SemMem**: Knowledge graph for software specs ([github.com/c360/semmem](https://github.com/c360/semmem))
+- **SemMem**: Knowledge graph for software specs ([github.com/c360/semmem](https://github.com/C360Studio/semmem))
 - **SemOps**: Operational picture with device tracking
 
 ## Related Documentation
@@ -669,7 +669,7 @@ Or use GraphQL Playground for interactive exploration: http://localhost:8080/gra
 
 ---
 
-**Implementation**: See [semstreams](https://github.com/c360/semstreams) repository
+**Implementation**: See [semstreams](https://github.com/C360Studio/semstreams) repository
 
 - Gateway Component: `gateway/graphql/`
 - Code Generation: Uses [gqlgen](https://gqlgen.com/)

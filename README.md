@@ -37,10 +37,10 @@ See **[Examples Overview](examples/README.md)** for full comparison and setup gu
 - **Production deployment?** → [Production Guide](docs/deployment/production.md)
 
 **Repositories:**
-[semstreams](https://github.com/c360/semstreams) (core)
-[semembed](https://github.com/c360/semembed) (embeddings)
-[semsummarize](https://github.com/c360/semsummarize) (LLM)
-[semmem](https://github.com/c360/semmem) (agentic memory)
+[semstreams](https://github.com/C360Studio/semstreams) (core)
+[semembed](https://github.com/C360Studio/semembed) (embeddings)
+[semsummarize](https://github.com/C360Studio/semsummarize) (LLM)
+[semmem](https://github.com/C360Studio/semmem) (agentic memory)
 
 ---
 

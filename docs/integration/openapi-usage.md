@@ -314,7 +314,7 @@ curl http://localhost:8080/flowbuilder/flows/my-flow/runtime/metrics
 }
 ```
 
-**See:** [Service Package README](https://github.com/c360/semstreams/blob/main/service/README.md) for service implementation details
+**See:** [Service Package README](https://github.com/C360Studio/semstreams/blob/main/service/README.md) for service implementation details
 
 ---
 
@@ -327,7 +327,7 @@ curl http://localhost:8080/flowbuilder/flows/my-flow/runtime/metrics
 | **Generated From** | Schema tags (build-time) | Service implementations (runtime) |
 | **Primary Users** | UI developers, client library authors | Operators, integrators, admins |
 | **Endpoints** | `/components/*` | `/api/v1/*`, `/flowbuilder/*` |
-| **Documentation** | [Schema Tags](../development/schema-tags.md) | [Service README](https://github.com/c360/semstreams/blob/main/service/README.md) |
+| **Documentation** | [Schema Tags](../development/schema-tags.md) | [Service README](https://github.com/C360Studio/semstreams/blob/main/service/README.md) |
 | **Updates** | Regenerate with `task schema:generate` | Automatic (service registration) |
 
 ---
@@ -406,17 +406,17 @@ openapi-python-client generate --url http://localhost:8080/components/types
 
 **Component Schema Tags:**
 - [Schema Tags Guide](../development/schema-tags.md) - Writing schema tags
-- [semstreams/docs/SCHEMA_GENERATION.md](https://github.com/c360/semstreams/blob/main/docs/SCHEMA_GENERATION.md) - Generation system
+- [semstreams/docs/SCHEMA_GENERATION.md](https://github.com/C360Studio/semstreams/blob/main/docs/SCHEMA_GENERATION.md) - Generation system
 - [Writing Components](../development/writing-components.md) - Component development
 
 **Service HTTP Handlers:**
-- [semstreams/service/README.md](https://github.com/c360/semstreams/blob/main/service/README.md) - Service implementation
-- [semstreams/service/openapi.go](https://github.com/c360/semstreams/blob/main/service/openapi.go) - OpenAPI types
+- [semstreams/service/README.md](https://github.com/C360Studio/semstreams/blob/main/service/README.md) - Service implementation
+- [semstreams/service/openapi.go](https://github.com/C360Studio/semstreams/blob/main/service/openapi.go) - OpenAPI types
 
 ### For Contract Testing
 
 **Backend:**
-- [semstreams/docs/CONTRACT_TESTING.md](https://github.com/c360/semstreams/blob/main/docs/CONTRACT_TESTING.md) - Schema validation tests
+- [semstreams/docs/CONTRACT_TESTING.md](https://github.com/C360Studio/semstreams/blob/main/docs/CONTRACT_TESTING.md) - Schema validation tests
 - `semstreams/test/contract/openapi_contract_test.go` - OpenAPI contract tests
 
 **Frontend:**

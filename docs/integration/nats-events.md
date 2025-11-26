@@ -129,6 +129,6 @@ for _, msg := range msgs {
 ## Integration Examples
 
 See individual service documentation for implementation details:
-- [semstreams](https://github.com/c360/semstreams) - Entity event publishing
-- [indexmanager](https://github.com/c360/semstreams/tree/main/processor/graph/indexmanager) - Event consumption
-- [semmem](https://github.com/c360/semmem) - Context management events
+- [semstreams](https://github.com/C360Studio/semstreams) - Entity event publishing
+- [indexmanager](https://github.com/C360Studio/semstreams/tree/main/processor/graph/indexmanager) - Event consumption
+- [semmem](https://github.com/C360Studio/semmem) - Context management events
